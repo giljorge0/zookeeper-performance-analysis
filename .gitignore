@@ -1,0 +1,17 @@
+# Python environments and cache
+venv/
+__pycache__/
+*.pyc
+
+# External downloads and raw logs
+ycsb-src/
+ycsb_results/*.log
+
+# LaTeX build artifacts (ignore the junk, keep the .tex and .pdf)
+*.aux
+*.fdb_latexmk
+*.fls
+*.synctex.gz
+*.toc
+*.out
+*.log
