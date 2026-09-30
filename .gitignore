@@ -15,3 +15,7 @@ ycsb_results/*.log
 *.toc
 *.out
 *.log
+
+# Maven build output (rebuild with: cd java-benchmark && mvn -DskipTests package)
+java-benchmark/target/
+java-benchmark/dependency-reduced-pom.xml

@@ -25,6 +25,9 @@ Interpretation once fitted:
 
 Usage:
     python3 usl_fit.py --input results.csv --output-dir usl_plots
+    # also write the single figure with every ensemble size (report Fig. 1):
+    python3 usl_fit.py --input results_java.csv --output-dir usl_plots_java \
+        --combined-plot usl_java_fit.pdf
 """
 import argparse
 import csv
@@ -89,6 +92,31 @@ def classify(sigma, kappa, sigma_stderr, kappa_stderr):
     return "near-linear: no significant contention or coherency cost detected in this range"
 
 
+def save_combined_plot(combined, path):
+    """All groups on one axis, fits extended past the largest tested N to show predicted peaks."""
+    colors = ["tab:blue", "tab:red", "tab:green", "tab:orange", "tab:purple"]
+    max_n = max(max(ns) for _, ns, _, _ in combined)
+    fine_n = np.linspace(1, max_n * 1.5, 300)
+    plt.figure(figsize=(6, 3.5))
+    for i, (group_value, ns, xs, fit) in enumerate(sorted(combined, key=lambda g: int(g[0]))):
+        color = colors[i % len(colors)]
+        noun = "node" if str(group_value) == "1" else "nodes"
+        plt.scatter(ns, xs, color=color, s=18, zorder=3)
+        plt.plot(fine_n, usl(fine_n, fit["gamma"], fit["sigma"], fit["kappa"]), color=color,
+                 label=f"{group_value} {noun} ($R^2$={fit['r2']:.3f})", zorder=2)
+    plt.axvline(max_n, linestyle=":", color="black", linewidth=0.8)
+    plt.text(max_n + 1, plt.ylim()[0] + 0.02 * (plt.ylim()[1] - plt.ylim()[0]) + 250,
+             "largest tested N", fontsize=6, color="gray")
+    plt.xlim(0, max_n * 1.5)
+    plt.ylim(bottom=0)
+    plt.xlabel("Concurrent clients $N$")
+    plt.ylabel("Throughput (ops/s)")
+    plt.legend(fontsize=7)
+    plt.tight_layout()
+    plt.savefig(path)
+    plt.close()
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--input", required=True, help="results.csv from benchmark.py / run_experiments.sh")
@@ -97,6 +125,8 @@ def main():
     ap.add_argument("--concurrency-col", default="clients")
     ap.add_argument("--group-col", default="ensemble_size")
     ap.add_argument("--summary-csv", default=None, help="defaults to <output-dir>/usl_summary.csv")
+    ap.add_argument("--combined-plot", default=None,
+                    help="also save one figure with every group's data and fit (e.g. usl_java_fit.pdf)")
     args = ap.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
@@ -118,6 +148,7 @@ def main():
                           f"{args.concurrency_col}/{args.metric}/{args.group_col}")
 
     summary_rows = []
+    combined = []  # (group_value, ns, xs, fit) for --combined-plot
     for group_value, points in sorted(groups.items(), key=lambda kv: kv[0]):
         # If the same (concurrency) was run more than once, average the
         # throughput so each x-value contributes once to the fit.
@@ -154,6 +185,7 @@ def main():
             "r2": fit["r2"], "n_max": fit["n_max"], "x_max": fit["x_max"],
             "classification": label,
         })
+        combined.append((group_value, ns, xs, fit))
 
         if HAVE_MPL:
             fine_n = np.linspace(min(ns), max(ns) * 1.5, 200)
@@ -173,6 +205,10 @@ def main():
             plt.savefig(out_png, dpi=150)
             plt.close()
             print(f"  plot: {out_png}")
+
+    if args.combined_plot and HAVE_MPL and combined:
+        save_combined_plot(combined, args.combined_plot)
+        print(f"[usl_fit] combined plot: {args.combined_plot}")
 
     with open(summary_csv, "w", newline="") as f:
         fieldnames = [args.group_col, "gamma", "sigma", "kappa", "r2", "n_max", "x_max", "classification"]

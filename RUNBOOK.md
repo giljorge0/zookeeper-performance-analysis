@@ -1,328 +1,168 @@
-# RUNBOOK.md — Stage I execution, data injection, report compile, video demo
+# RUNBOOK — reproducing the Stage I results and recording the demo
 
-Assumes a fresh terminal, `cd`'d into the directory containing the 9 files
-you already have. Commands are copy-paste exact for Ubuntu/Debian; macOS
-notes are called out where a command differs.
+Commands are for Ubuntu/Debian, run from the repository root. See `README.md`
+for the repository layout and a two-minute demo.
 
 ---
 
-## 0. Before anything: clear the container-name collision
+## 0. Before anything: free the container names
 
-`run_experiments.sh` / `scale_ensemble.sh` create containers named
-`zk1`...`zk9` on a network called `zknet-bench`. If the **manual** 3-node
-ensemble from `zookeeper-setup-guide.md` (network `zknet`) is still
-running, its containers are *also* named `zk1`/`zk2`/`zk3` — Docker
-container names are global, not per-network, so `run_experiments.sh` will
-fail with `Conflict. The container name "/zk1" is already in use`.
-
-Tear the manual ensemble down first:
+The experiment scripts create containers `zk1`…`zk9` on the network
+`zknet-bench`. The manual ensemble from `zookeeper-setup-guide.md` (network
+`zknet`) uses the same container names, and Docker names are global, so tear it
+down first or the scripts fail with `Conflict. The container name "/zk1" is already in use`:
 
 ```bash
 docker rm -f zk1 zk2 zk3
 docker network rm zknet
-docker ps -a   # confirm nothing zk-named is left
+docker ps -a        # nothing zk-named should be left
 ```
 
----
-
-## 1. Environment & permissions
+## 1. Environment
 
 ```bash
-python3 -m venv venv
-source venv/bin/activate            # Windows: venv\Scripts\activate
-pip install --upgrade pip
-pip install -r requirements.txt
-
-chmod +x scale_ensemble.sh run_experiments.sh run_ycsb.sh
-
-# sanity checks
-docker --version
-python3 -c "import kazoo, scipy, numpy, matplotlib; print('deps OK')"
+sudo apt-get install -y default-jdk maven        # Java benchmark + YCSB
+python3 -m venv venv && source venv/bin/activate
+pip install -r requirements.txt                  # usl_fit.py, plot_chaos.py
+(cd java-benchmark && mvn -q -DskipTests package)
 ```
 
-`run_ycsb.sh` additionally needs a JDK and Maven **on this machine**, not
-in the Python venv:
+## 2. Scalability grid (report Tables 1–2, Fig. 1)
 
 ```bash
-# Ubuntu/Debian
-sudo apt-get update && sudo apt-get install -y default-jdk maven
-java -version
-mvn -version
-
-# macOS (Homebrew)
-brew install openjdk maven
+ENSEMBLE_SIZES="1 3 5" ./run_java_experiments.sh
 ```
 
----
+For each ensemble size the script starts a fresh ensemble with `scale_ensemble.sh`, then
+sweeps 1, 5, 10, 20, 40 and 80 clients (30% writes, 5 s warmup, 30 s
+measured), with `metrics_collector.py` polling `mntr` on every server. Output:
+`results_java.csv` and `metrics_java.csv`. The run takes about 15 minutes, and nothing
+else should use the ensemble while it runs.
 
-## 2. Execution sequence
-
-### 2.1 Custom Kazoo benchmark + USL grid
-
-This brings ensembles up and down itself (sizes 1, 3, 5) and tears
-everything down when it finishes — don't run anything else against a
-ZooKeeper container while this is in progress.
+Fit the USL:
 
 ```bash
-source venv/bin/activate
-./run_experiments.sh
+python3 usl_fit.py --input results_java.csv --output-dir usl_plots_java \
+    --combined-plot usl_java_fit.pdf
 ```
 
-Defaults: `ENSEMBLE_SIZES="1 3 5"`, `CLIENT_COUNTS="1 5 10 20 40 80"`,
-`WRITE_RATIO=0.3`, `DURATION=30`, `WARMUP=5` — 18 points, ~15–20 minutes.
-Override any of them by prefixing the command, e.g. for a faster smoke
-test before committing to the full run:
+`usl_plots_java/usl_summary.csv` holds the coefficients. `usl_fit.py` uses
+Gunther's original names, and the report uses the α/β notation:
 
-```bash
-ENSEMBLE_SIZES="3" CLIENT_COUNTS="1 10 50" DURATION=10 WARMUP=2 ./run_experiments.sh
-```
-
-**Run the full-grid version at least once** (defaults, no overrides) —
-that's the data the report's Table 1 and `usl_fit.py` need. Confirm it
-produced output:
-
-```bash
-wc -l results.csv metrics.csv
-```
-
-### 2.2 Fit the USL curves
-
-```bash
-python3 usl_fit.py --input results.csv --output-dir usl_plots
-```
-
-This prints per-ensemble-size coefficients to the terminal **and** writes
-`usl_plots/usl_summary.csv` plus one PNG per ensemble size — that CSV is
-where you'll pull numbers for `report.tex` in step 3.
-
-### 2.3 YCSB cross-validation
-
-`run_experiments.sh` already tore its ensembles down, so bring up a fresh
-one specifically for this — matching `ensemble_size=3`, the size the
-report's YCSB comparison uses:
-
-```bash
-source scale_ensemble.sh
-start_ensemble 3
-wait_ensemble 3
-```
-
-Now run YCSB against it (first run builds from source — takes a few
-minutes; the `zk1` container just needs to be up, it doesn't need to
-currently hold the leader role):
-
-```bash
-./run_ycsb.sh
-```
-
-Defaults: `THREADS="1 4 16 32"`, workloads A/B/C, `RECORDCOUNT=10000`,
-`OPERATIONCOUNT=50000`. Confirm output, then tear the ensemble down:
-
-```bash
-cat ycsb_results/ycsb_summary.csv
-stop_ensemble
-```
-
----
-
-## 3. Data extraction & injection
-
-### 3.1 Where α (contention) and β (coherency delay) live
-
-**Important naming note:** `usl_fit.py`'s code and terminal/CSV output use
-the variable names `sigma` and `kappa` (Gunther's original USL notation).
-`report.tex` and `pipeline_analysis.md` use `α` and `β` for the exact same
-two fitted quantities — the mapping is:
-
-| `usl_summary.csv` column | Report symbol | Meaning |
+| `usl_summary.csv` | report | meaning |
 |---|---|---|
-| `gamma` | $\gamma$ | ideal single-client throughput |
-| `sigma` | $\alpha$ | contention coefficient |
-| `kappa` | $\beta$ | coherency-delay coefficient |
-| `r2` | $R^2$ | fit quality |
-| `n_max` | $N_{\max}$ | predicted peak concurrency |
+| `gamma` | γ | ideal single-client throughput |
+| `sigma` | α | contention |
+| `kappa` | β | coherency delay |
+| `n_max` | N_max | predicted peak concurrency, `sqrt((1-α)/β)` |
 
-Open it:
+The standard errors in Table 1 are printed to the terminal by `usl_fit.py`.
 
-```bash
-cat usl_plots/usl_summary.csv
-```
-
-You'll get one row per `ensemble_size` (1, 3, 5). Copy each row's five
-numbers into the corresponding cells of `report.tex`'s Table 1.
-
-### 3.2 Injecting into `report.tex`
-
-Table 1 has 15 bracketed placeholders (5 columns × 3 rows). Fastest way is
-`sed`, one substitution per cell — replace `<value>` with the actual
-number from `usl_summary.csv`:
-
-```bash
-sed -i \
-  -e 's/\[MEASURED_GAMMA_N1\]/<value>/'  -e 's/\[MEASURED_ALPHA_N1\]/<value>/'  -e 's/\[MEASURED_BETA_N1\]/<value>/'  -e 's/\[MEASURED_R2_N1\]/<value>/'  -e 's/\[MEASURED_NMAX_N1\]/<value>/' \
-  -e 's/\[MEASURED_GAMMA_N3\]/<value>/'  -e 's/\[MEASURED_ALPHA_N3\]/<value>/'  -e 's/\[MEASURED_BETA_N3\]/<value>/'  -e 's/\[MEASURED_R2_N3\]/<value>/'  -e 's/\[MEASURED_NMAX_N3\]/<value>/' \
-  -e 's/\[MEASURED_GAMMA_N5\]/<value>/'  -e 's/\[MEASURED_ALPHA_N5\]/<value>/'  -e 's/\[MEASURED_BETA_N5\]/<value>/'  -e 's/\[MEASURED_R2_N5\]/<value>/'  -e 's/\[MEASURED_NMAX_N5\]/<value>/' \
-  report.tex
-```
-
-Also replace the caption placeholder with the write ratio you actually
-used (0.3 if you ran the defaults):
-
-```bash
-sed -i 's/\[MEASURED_WRITE_RATIO\]/0.3/' report.tex
-```
-
-The three remaining prose placeholders — `[MEASURED: state here whether α
-grows...]`, the pipeline/bottleneck paragraph, and the YCSB comparison
-paragraph — are judgment calls on your actual numbers, not values to
-`sed` in. Read them directly in `report.tex` and replace each bracketed
-block with 2–3 sentences. Use these to find the underlying numbers:
-
-**Pipeline/bottleneck evidence** — leader's outstanding-request trend at
-the highest-load point:
+Outstanding-request evidence for the bottleneck discussion (change
+`ensemble_size`/`clients` as needed):
 
 ```bash
 python3 - <<'EOF'
 import csv
 from collections import defaultdict
-
-rows = [r for r in csv.DictReader(open("metrics.csv"))
-        if r["ensemble_size"] == "5" and r["clients"] == "80"]
-
+rows = [r for r in csv.DictReader(open("metrics_java.csv"))
+        if r["ensemble_size"] == "1" and r["clients"] == "80"]
 by_port = defaultdict(list)
 for r in rows:
-    by_port[r["port"]].append(r)
-
-for port, rs in by_port.items():
-    states = [r["zk_server_state"] for r in rs if r["zk_server_state"]]
-    role = max(set(states), key=states.count) if states else "unknown"
-    print(f"port {port} ({role}): outstanding_requests last 10 samples =",
-          [r["zk_outstanding_requests"] for r in rs[-10:]])
+    by_port[r["port"]].append(float(r["zk_outstanding_requests"] or 0))
+for port, v in by_port.items():
+    print(port, "mean", round(sum(v) / len(v), 2), "max", max(v))
 EOF
 ```
 
-Change `ensemble_size`/`clients` to whichever point you actually ran at
-the highest write ratio and concurrency. A leader whose
-`zk_outstanding_requests` climbs across those samples (rather than
-oscillating around a flat baseline) supports the "leader is the
-bottleneck" claim; flat means there was still headroom at that load.
-
-**YCSB comparison** — pull the matching rows:
+## 3. YCSB cross-validation (report Table 3)
 
 ```bash
-grep -E "^workloada,|^workload,threads" ycsb_results/ycsb_summary.csv     # 50/50 -> compare to write_ratio≈0.5 rows in results.csv
-grep "ensemble_size,clients,write_ratio,throughput" -A0 results.csv       # header, to locate the right column
-awk -F',' '$4>0.45 && $4<0.55 {print}' results.csv                       # results.csv rows near write_ratio 0.5
+./scale_ensemble.sh start 3 && ./scale_ensemble.sh wait 3
+./run_ycsb.sh                     # first run clones and builds YCSB (a few minutes)
+cat ycsb_results/ycsb_summary.csv
+./scale_ensemble.sh stop
 ```
 
-(Column positions in `results.csv` may shift if you changed CLI defaults
-— check the header row first with `head -1 results.csv`.)
+The defaults are workloads A/B/C, 1, 4, 16 and 32 threads, 10 000 records and 50 000 ops.
 
-### 3.3 Injecting into `pipeline_analysis.md`
-
-Same source data, same numbers, different placeholders (`[MEASURED: ...]`
-blocks in §2–§5). These are prose, not single values — replace each
-bracketed block with your actual finding using the same `metrics.csv` /
-`usl_summary.csv` extraction commands from 3.2. There's no `sed` shortcut
-here since it's paragraph-length judgment, not a fixed cell.
-
-### 3.4 Commit identifier + video link
-
-Once you've pushed to the RNL GitLab remote (see `README.md`'s
-"Repository / submission target" section):
+## 4. Leader failover (report §2.2)
 
 ```bash
-GITLAB_COMMIT=$(git rev-parse HEAD)   # run this with GitLab as the checked-out remote/branch
-sed -i "s/<GITLAB_COMMIT_HASH_PLACEHOLDER>/${GITLAB_COMMIT}/g" report.tex
-sed -i "s#<INSERT-UNLISTED-YOUTUBE-LINK-HERE>#https://youtu.be/<your-video-id>#" report.tex
+./scale_ensemble.sh start 3 && ./scale_ensemble.sh wait 3
+# keep load running in another terminal:
+java -jar java-benchmark/target/zk-benchmark-1.0-SNAPSHOT.jar \
+  --hosts 127.0.0.1:2181,127.0.0.1:2182,127.0.0.1:2183 \
+  --ensemble-size 3 --clients 10 --duration 60 --warmup 2 --output failover.csv
+# find and kill the leader
+for i in 1 2 3; do echo -n "zk$i: "; docker exec zk$i zkServer.sh status 2>&1 | grep Mode; done
+docker kill zk<leader-id>
+docker logs zk<follower-id> 2>&1 | grep "LEADER ELECTION TOOK"
+./scale_ensemble.sh stop
 ```
 
-Also fill in the two `<STUDENT_NUMBER>` placeholders in the `\author{}`
-line by hand.
+## 5. Network chaos (report §4.4)
+
+```bash
+./run_java_chaos.sh               # 3 nodes, 20 ms ± 2 ms egress delay via Pumba
+python3 plot_chaos.py --healthy results_java.csv --chaos chaos_results_java.csv \
+    --ensemble-size 3 --output chaos_comparison.png
+```
+
+The script waits for Pumba's own timer to expire so that the `tc` rules are
+removed cleanly. Do not interrupt it at the end. `chaos_results.csv` and the
+current `chaos_comparison.png` come from the earlier Python-client run
+(`run_chaos_experiment.sh`, compared against `results.csv`).
+
+## 6. Report
+
+```bash
+pdflatex -interaction=nonstopmode report.tex && pdflatex -interaction=nonstopmode report.tex
+pdfinfo report.pdf | grep Pages     # limit: 5 pages excluding references
+```
+
+`llncs.cls` comes from the Springer LNCS author kit, or from `tlmgr install llncs`.
+The bibliography is inline, so no `bibtex` run is needed.
 
 ---
 
-## 4. Report compilation
+## Demo video script (≤ 5 min)
 
-`report.tex` builds its bibliography **inline** with `\begin{thebibliography}`
-— there is no separate `.bib` file, so **no `bibtex` run is needed**. Two
-`pdflatex` passes are enough (the second resolves the `\ref{tab:usl}` /
-`\ref{eq:usl}` cross-references; the first pass alone will show
-"undefined references" warnings, which is expected and not an error):
-
-```bash
-# get llncs.cls first if you don't have it — either from your course's
-# Springer LNCS author-kit zip (place llncs.cls next to report.tex), or:
-sudo tlmgr install llncs      # if tlmgr has network access to CTAN
-
-pdflatex -interaction=nonstopmode report.tex
-pdflatex -interaction=nonstopmode report.tex
-```
-
-Check the page count (PDF requirement: ≤5 pages excluding references):
-
-```bash
-pdfinfo report.pdf | grep Pages
-```
-
-If it's over, the usual first cuts are the qualitative fault-tolerance
-subsection (2.3) and trimming the pipeline diagram-equivalent prose in
-Section 2.1 to a citation instead.
-
----
-
-## 5. Video demo script (5 minutes, on-screen commands)
-
-Record your terminal directly; narrate briefly as each block runs. Times
-are a budget, not a hard cutoff.
-
-**0:00–1:00 — Manual 3-node deployment**
+**0:00–1:00 — Deploy 3 servers with plain `docker run`**
 ```bash
 docker network create zknet
 SERVERS="server.1=zk1:2888:3888;2181 server.2=zk2:2888:3888;2181 server.3=zk3:2888:3888;2181"
 docker run -d --name zk1 --network zknet -p 2181:2181 -e ZOO_MY_ID=1 -e ZOO_SERVERS="$SERVERS" zookeeper:3.9
 docker run -d --name zk2 --network zknet -p 2182:2181 -e ZOO_MY_ID=2 -e ZOO_SERVERS="$SERVERS" zookeeper:3.9
 docker run -d --name zk3 --network zknet -p 2183:2181 -e ZOO_MY_ID=3 -e ZOO_SERVERS="$SERVERS" zookeeper:3.9
-docker ps
-```
-
-**1:00–1:30 — Confirm roles**
-```bash
 for i in 1 2 3; do echo -n "zk$i: "; docker exec zk$i zkServer.sh status 2>&1 | grep Mode; done
 ```
 
-**1:30–2:30 — Quick load / replication check**
+**1:00–2:00 — Replication and load**
 ```bash
 docker exec zk1 zkCli.sh -server zk1:2181 create /demo hello
 docker exec zk1 zkCli.sh -server zk3:2181 get /demo
-python3 benchmark.py --hosts zk1:2181,zk2:2182,zk3:2183 --ensemble-size 3 \
-  --clients 10 --write-ratio 0.3 --duration 10 --warmup 2 --output /tmp/demo.csv
+java -jar java-benchmark/target/zk-benchmark-1.0-SNAPSHOT.jar \
+  --hosts 127.0.0.1:2181,127.0.0.1:2182,127.0.0.1:2183 \
+  --ensemble-size 3 --clients 10 --write-ratio 0.3 --duration 10 --warmup 2 --output demo.csv
 ```
-(Point out the printed throughput/p99 line as it finishes — that's the
-live version of what fills `results.csv`.)
 
-**2:30–4:00 — Leader crash and failover**
+**2:00–3:00 — Leader crash and recovery**
 ```bash
-for i in 1 2 3; do echo -n "zk$i: "; docker exec zk$i zkServer.sh status 2>&1 | grep Mode; done
-# note which one says "leader" above, then:
-docker kill zk<leader-number>
+docker kill zk<leader-id>
 for i in 1 2 3; do echo -n "zk$i: "; docker exec zk$i zkServer.sh status 2>&1 | grep -E "Mode|Error"; done
-docker exec zk1 zkCli.sh -server zk1:2181 get /demo        # still works: majority survives
-docker logs zk1 2>&1 | grep "LEADER ELECTION TOOK"          # failover time, on-screen
+docker exec zk<survivor-id> zkCli.sh -server zk<survivor-id>:2181 get /demo
+docker logs zk<survivor-id> 2>&1 | grep "LEADER ELECTION TOOK"
+docker start zk<leader-id>          # rejoins as follower
 ```
 
-**4:00–4:45 — Recovery**
-```bash
-docker start zk<old-leader-number>
-docker exec zk<old-leader-number> zkServer.sh status         # rejoins as follower
-docker exec zk1 zkCli.sh -server zk<old-leader-number>:2181 get /demo   # caught up
-```
+**3:00–4:45 — Main results:** show Fig. 1 (`usl_java_fit.pdf`) and Table 1.
+- α ≈ 0.23 at every size, including standalone, so the contention is in the server pipeline and not in Zab.
+- γ falls as servers are added (the per-write quorum cost).
+- β > 0 only for replicated ensembles, with a predicted peak near 32–36 clients.
+- YCSB agrees on shape.
 
-**4:45–5:00 — Close**
+**4:45–5:00 — Clean up**
 ```bash
-docker rm -f zk1 zk2 zk3
-docker network rm zknet
+docker rm -f zk1 zk2 zk3 && docker network rm zknet
 ```
-Narrate the one-sentence takeaway on camera: 2-of-3 kept serving through
-the kill, and the failover time printed above is the number to cite
-against the USL/pipeline bottleneck discussion in the report.

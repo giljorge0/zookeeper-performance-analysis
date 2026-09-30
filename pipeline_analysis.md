@@ -63,10 +63,10 @@ Observed decline from 40 to 80 clients: -2.8% (3 servers), -4.9% (5 servers). Th
 **Leader failover (fault tolerance).** With a continuous benchmark on 3 nodes, the leader was identified with `stat` and killed with `docker kill zk1`. A surviving follower logged `FOLLOWING - LEADER ELECTION TOOK - 211 MS`. This is ZooKeeper's own election-phase timing from that follower's perspective, not client-observed downtime (not instrumented).
 
 **Network chaos (extra credit).** A 20 ms egress delay was injected with Pumba / `tc netem` into the container network namespaces of a 3-node ensemble.
-- `gamma` collapsed by roughly 27x.
+- `gamma` collapsed by roughly 88x (Java healthy baseline 1907 ops/s -> 21.8 ops/s under delay).
+- The delayed sweep used the earlier Python client (complete, 1-80 clients, no errors). A partial Java re-run (`chaos_results_java.csv`, 1-40 clients) agrees within 5% at 1, 5 and 40 clients, so under the delay the load generator is not the limit.
 - Fitted `alpha` and `beta` dropped to near zero, with near-linear scaling up to 80 clients.
 - Interpretation: every client is mostly waiting on the delay, so requests are heavily pipelined and the server stages that cause `alpha` and `beta` are rarely busy simultaneously. The saturation point moves beyond the tested range; the serialization still exists. `alpha` and `beta` describe the regime tested, not fixed properties of the system.
-- (The chaos figures are as reported by the team; the raw chaos data was not part of the files used for this document.)
 
 ## 8. YCSB cross-check (3 servers)
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# run_chaos_experiment.sh - inject synthetic network latency between ZK
+# run_java_chaos.sh - inject synthetic network latency between ZK
 # nodes and re-run the benchmark at a fixed ensemble size, to see how the
 # fitted USL coefficients (particularly beta) respond.
 #
@@ -8,7 +8,7 @@
 # size we care about here - that would destroy the chaos-injected
 # containers before a single benchmark point ran. This script starts the
 # ensemble ONCE, injects chaos into the already-running containers, then
-# drives benchmark.py directly across the concurrency sweep.
+# drives the Java benchmark (java-benchmark/) directly across the concurrency sweep.
 #
 # WHY Pumba, and WHY --interface eth0 (not the bridge): applying tc/netem
 # to the Docker bridge interface itself (e.g. br-xxxx) does NOT delay
@@ -30,8 +30,8 @@
 # waiting at the end - accept it; don't shorten the duration to avoid it.
 #
 # Usage:
-#   ./run_chaos_experiment.sh
-#   DELAY_MS=50 CLIENT_COUNTS="1 10 40" ./run_chaos_experiment.sh
+#   ./run_java_chaos.sh
+#   DELAY_MS=50 CLIENT_COUNTS="1 10 40" ./run_java_chaos.sh
 
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -51,7 +51,7 @@ TC_IMAGE="${TC_IMAGE:-gaiadocker/iproute2}"
 RESULTS_CSV="${RESULTS_CSV:-${SCRIPT_DIR}/chaos_results_java.csv}"
 
 # --- compute a safe Pumba chaos window ---
-# per_point_overhead covers benchmark.py's znode-pool setup/teardown around
+# per_point_overhead covers the benchmark's znode-pool setup/teardown around
 # each measured point; startup_buffer covers ensemble stabilization plus
 # the few seconds Pumba's helper containers need to attach.
 n_points=$(echo "$CLIENT_COUNTS" | wc -w)
@@ -148,4 +148,4 @@ stop_ensemble
 echo ""
 echo "[chaos] done: ${RESULTS_CSV}"
 echo "[chaos] compare against the healthy baseline with:"
-echo "  python3 ${SCRIPT_DIR}/plot_chaos.py --healthy ${SCRIPT_DIR}/results.csv --chaos ${RESULTS_CSV} --ensemble-size ${ENSEMBLE_SIZE}"
+echo "  python3 ${SCRIPT_DIR}/plot_chaos.py --healthy ${SCRIPT_DIR}/results_java.csv --chaos ${RESULTS_CSV} --ensemble-size ${ENSEMBLE_SIZE}"

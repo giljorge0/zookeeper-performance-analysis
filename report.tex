@@ -39,7 +39,7 @@ instead as a lower ideal throughput $\gamma$ and the nonzero $\beta$. We
 cross-validate against YCSB's ZooKeeper binding, which shows the same
 read/write cost asymmetry and the same peak-then-decline shape. We also
 measured a 211\,ms leader election after killing the leader and, as extra
-credit, a 20\,ms egress delay that cut $\gamma$ by roughly 27$\times$
+credit, a 20\,ms egress delay that cut $\gamma$ by roughly 88$\times$
 while driving the fitted $\alpha$ and $\beta$ toward zero.
 \end{abstract}
 
@@ -295,10 +295,15 @@ To see how the model behaves under a large per-request service-time
 increase, we injected a 20\,ms egress delay with Pumba~\cite{pumba} (which
 drives \texttt{tc netem}) into the container network namespaces of a 3-node
 ensemble and re-ran the sweep. Single-client throughput $\gamma$ collapsed by
-roughly $27\times$, as every operation that crosses a delayed link now pays
-tens of milliseconds instead of well under one. Paradoxically, the fitted
-$\alpha$ and $\beta$ dropped to near zero, and throughput scaled almost
-linearly with clients up to 80.
+roughly $88\times$ (from 1907 to 21.8\,ops/s), as every operation that crosses
+a delayed link now pays tens of milliseconds instead of well under one.
+Paradoxically, the fitted $\alpha$ and $\beta$ dropped to near zero, and
+throughput scaled almost linearly with clients up to 80.
+The delayed sweep was run with our earlier Python client, which completed all
+six concurrency levels; a partial Java re-run agrees within 5\% at 1, 5 and 40
+clients (e.g.\ 20.9 vs.\ 21.6\,ops/s at one client), so with the injected
+delay the load generator is not the limiting factor. The ratio is taken
+against the Java healthy baseline ($\gamma=1907$\,ops/s).
 
 This does not mean the delay removed the serialization or coherency cost. With
 each client spending nearly all its time waiting on the injected delay, many
@@ -332,7 +337,7 @@ serialization; Zab's cost appears instead in $\gamma$ (each write pays a
 quorum round trip and follower \texttt{fsync}) and in $\beta$. YCSB, an
 independent load generator, reproduces the read/write cost asymmetry and the
 peak-then-decline shape. A leader failover took 211\,ms of election time, and
-a 20\,ms network delay cut $\gamma$ by roughly 27$\times$ while making the
+a 20\,ms network delay cut $\gamma$ by roughly 88$\times$ while making the
 fit look contention-free, a reminder that $\alpha$ and $\beta$ describe the
 regime that was measured.
 
