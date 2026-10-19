@@ -191,7 +191,7 @@ def main():
 
     os.makedirs(a.outdir, exist_ok=True)
     json.dump({"gamma": p[0], "alpha": p[1], "beta": p[2], "n_max": nmax, "x_max": xmax, "r2": r2,
-               "ci": {"gamma": ci(0), "alpha": ci(1), "beta": ci(2)}, "amdahl": list(pa),
+               "ci": {"gamma": ci(0), "alpha": ci(1), "beta": ci(2), "n_max": ci(3), "x_max": ci(4)}, "amdahl": list(pa),
                "aic_usl": aic_u, "aic_amdahl": aic_a, "f_test_p": pF, "holdout": hold, "warnings": warn},
               open(os.path.join(a.outdir, "usl_single_fit.json"), "w"), indent=2, default=float)
     with open(os.path.join(a.outdir, "usl_single_fit.tex"), "w") as fh:
