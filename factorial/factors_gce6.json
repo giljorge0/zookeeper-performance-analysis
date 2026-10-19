@@ -1,0 +1,17 @@
+{
+  "name": "GCE, 6 factors (single zone): 2^(6-1), F = ABCDE, resolution VI, 32 runs per replicate",
+  "factors": [
+    {"name": "ensemble_size", "param": "ensemble_size", "low": 3, "high": 5, "hard": true,
+     "why": "quorum cost: gamma and beta"},
+    {"name": "write_ratio", "param": "write_ratio", "low": 0.1, "high": 0.5,
+     "why": "write pipeline vs local reads"},
+    {"name": "clients", "param": "clients", "low": 10, "high": 160,
+     "why": "below the knee vs well past it"},
+    {"name": "force_sync", "param": "force_sync", "low": "yes", "high": "no", "hard": true,
+     "why": "removes the fsync from the write path: tests the log-sync stage"},
+    {"name": "payload_bytes", "param": "payload_bytes", "low": 128, "high": 4096,
+     "why": "bytes logged and replicated per write"},
+    {"name": "log_disk", "param": "log_disk", "low": "pd-balanced", "high": "pd-ssd", "hard": true,
+     "why": "fsync device speed"}
+  ]
+}

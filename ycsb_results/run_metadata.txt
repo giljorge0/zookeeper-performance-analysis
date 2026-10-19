@@ -1,0 +1,2 @@
+generated_at=2026-09-28T22:18:45+01:00
+harness_git_commit=not-a-git-repo-or-no-commits-yet

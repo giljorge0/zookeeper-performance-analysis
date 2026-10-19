@@ -1,0 +1,4 @@
+numpy
+scipy
+matplotlib
+# kazoo==2.10.0   (only for the legacy Python benchmark, benchmark.py)
