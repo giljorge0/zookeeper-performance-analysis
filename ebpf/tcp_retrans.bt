@@ -1,0 +1,22 @@
+#!/usr/bin/env bpftrace
+/*
+ * tcp_retrans.bt - TCP retransmissions and connection resets, per second and in total.
+ * Tests the network between ensemble members (leader<->follower proposals/ACKs): retransmits add RTOs to the quorum wait.
+ * Usage: sudo bpftrace tcp_retrans.bt
+ */
+tracepoint:tcp:tcp_retransmit_skb
+{
+  @retransmits = count();
+  @retrans_per_sec = count();
+}
+
+tracepoint:tcp:tcp_send_reset
+{
+  @resets_sent = count();
+}
+
+interval:s:1
+{
+  print(@retrans_per_sec);
+  clear(@retrans_per_sec);
+}
