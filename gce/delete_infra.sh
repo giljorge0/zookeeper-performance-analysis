@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
-# delete_infra.sh - removes every VM and disk (stops spending credits). Cannot be undone.
-REGION="${REGION:-europe-west1}"
-for spec in zkclient:b zk1:b zk2:b zk3:b zk4:b zk5:b zkm1:b zkm2:c zkm3:d zkm4:b zkm5:c; do
-  gcloud compute instances delete "${spec%%:*}" --zone="$REGION-${spec##*:}" --quiet &
+# delete_infra.sh - DELETES every VM of the project whose name starts with zk, with its disks (the log disks are
+# created with auto-delete). Stops all spending on them. Cannot be undone: copy the results back first.
+mapfile -t VMS < <(gcloud compute instances list --filter='name~^zk' --format='value(name,zone.basename())')
+[ ${#VMS[@]} -gt 0 ] || { echo "no zk* VMs in project $(gcloud config get-value project 2>/dev/null)"; exit 0; }
+echo "deleting: $(printf '%s ' "${VMS[@]%%[[:space:]]*}")"
+for vm in "${VMS[@]}"; do
+  set -- $vm
+  gcloud compute instances delete "$1" --zone="$2" --quiet &
 done; wait
+echo "left (VMs, then disks):"
+gcloud compute instances list --filter='name~^zk' --format='value(name)'
+gcloud compute disks list --filter='name~^zk' --format='value(name)'

@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
-# stop_infra.sh - STOPS the VMs without deleting them (no CPU charges; disks kept). Use start_infra.sh to resume.
-REGION="${REGION:-europe-west1}"
-for spec in zkclient:b zk1:b zk2:b zk3:b zk4:b zk5:b zkm1:b zkm2:c zkm3:d zkm4:b zkm5:c; do
-  gcloud compute instances ${ACTION:-stop} "${spec%%:*}" --zone="$REGION-${spec##*:}" --quiet &
+# stop_infra.sh - STOPS the project's VMs whose name starts with zk (zkclient, zk1..zk5, zkm*) without deleting
+# them: no CPU charges, the disks are kept (and still billed). start_infra.sh resumes them; internal IPs stay the same.
+mapfile -t VMS < <(gcloud compute instances list --filter='name~^zk' --format='value(name,zone.basename())')
+[ ${#VMS[@]} -gt 0 ] || { echo "no zk* VMs in project $(gcloud config get-value project 2>/dev/null)"; exit 0; }
+for vm in "${VMS[@]}"; do
+  set -- $vm
+  gcloud compute instances ${ACTION:-stop} "$1" --zone="$2" --quiet &
 done; wait
+gcloud compute instances list --filter='name~^zk' --format='table(name,zone.basename(),status)'

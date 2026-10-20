@@ -9,14 +9,16 @@ Java benchmark. Results are appended to factorial_results.csv, so an
 interrupted run resumes where it stopped.
 
 Backends:
-  docker : local pilot (this file). Factors: ensemble_size, force_sync,
-           cpu_quota, log_device (disk|tmpfs), write_ratio, clients, payload_bytes.
+  docker : local runs (this file). Server factors: ensemble_size, force_sync, and optionally
+           cpu_quota (docker --cpus) and log_device (disk|tmpfs, default disk).
   gce    : gce/gce_backend.py - run this script ON the zkclient VM; it configures the
-           server VMs over ssh (ensemble_size, force_sync, placement, log_disk).
+           server VMs over ssh (ensemble_size, force_sync, log_disk, optionally placement).
 
-Safety check: if the benchmark prints more than --max-stdout-lines lines,
+Safety checks: if the benchmark prints more than --max-stdout-lines lines,
 the Java client is logging per operation, which silently throttles it
 (the Stage I throughput gap). The runner aborts instead of recording bad data.
+The client host's CPU use is sampled with vmstat during every run and stored as
+client_cpu_busy_pct: above ~70% the load generator, not ZooKeeper, may be the limit.
 
 Usage:
   python3 run_plan.py --plan plan_pilot/plan.csv --jar ../java-benchmark/target/zk-benchmark-1.0-SNAPSHOT.jar \
@@ -32,7 +34,7 @@ import tempfile
 import time
 
 RESPONSES = ["throughput_ops_sec", "overall_p99_ms", "read_p50_ms", "write_p50_ms",
-             "write_p99_ms", "total_ops_err"]
+             "write_p99_ms", "total_ops_err", "client_cpu_busy_pct"]
 SERVER_PARAMS = ["ensemble_size", "force_sync", "cpu_quota", "log_device", "placement", "log_disk"]
 
 
@@ -57,13 +59,15 @@ class DockerBackend:
         servers = " ".join(f"server.{i}=zk{i}:2888:3888;2181" for i in range(1, n + 1))
         for i in range(1, n + 1):
             cmd = ["docker", "run", "-d", "--name", f"zk{i}", "--network", self.NET,
-                   "-p", f"{2181 + i - 1}:2181", "--cpus", str(cfg["cpu_quota"]),
+                   "-p", f"{2181 + i - 1}:2181",
                    "-e", f"ZOO_MY_ID={i}", "-e", f"ZOO_SERVERS={servers}",
                    "-e", "ZOO_MAX_CLIENT_CNXNS=0",
                    "-e", "ZOO_4LW_COMMANDS_WHITELIST=srvr,stat,mntr,conf,cons,ruok,wchs"]
+            if cfg.get("cpu_quota"):
+                cmd += ["--cpus", str(cfg["cpu_quota"])]
             if cfg["force_sync"] == "no":
                 cmd += ["-e", "JVMFLAGS=-Dzookeeper.forceSync=no"]
-            if cfg["log_device"] == "tmpfs":
+            if cfg.get("log_device", "disk") == "tmpfs":
                 cmd += ["--tmpfs", "/datalog"]
             sh(cmd + [self.IMAGE])
         self._wait(n)
@@ -92,7 +96,7 @@ class DockerBackend:
         cmdline = out[0] if out else ""
         tmp = out[-1].strip() if out else "?"
         fs_ok = ("forceSync=no" in cmdline) == (cfg["force_sync"] == "no")
-        dev_ok = (tmp == "1") == (cfg["log_device"] == "tmpfs")
+        dev_ok = (tmp == "1") == (cfg.get("log_device", "disk") == "tmpfs")
         print(f"    verify: forceSync flag {'OK' if fs_ok else 'MISMATCH'}, "
               f"/datalog tmpfs {'OK' if dev_ok else 'MISMATCH'}", flush=True)
         if not (fs_ok and dev_ok):
@@ -102,22 +106,50 @@ class DockerBackend:
         return ",".join(f"127.0.0.1:{2181 + i}" for i in range(int(cfg["ensemble_size"])))
 
 
+def cpu_busy_pct(vmstat_text, skip):
+    """Mean CPU busy % (100 - idle) of this host from `vmstat 1` output. Skips the first `skip` samples (the
+    since-boot line, JVM start, znode pool, warm-up) and the last one (pool cleanup). None without enough samples."""
+    idle_col, busy = None, []
+    for line in vmstat_text.splitlines():
+        f = line.split()
+        if "id" in f and "us" in f:
+            idle_col = f.index("id")
+        elif idle_col is not None and len(f) > idle_col and all(x.isdigit() for x in f):
+            busy.append(100 - int(f[idle_col]))
+    busy = busy[skip:-1]
+    return sum(busy) / len(busy) if busy else None
+
+
 def run_benchmark(jar, hosts, cfg, args, label):
     with tempfile.TemporaryDirectory() as td:
         out = os.path.join(td, "r.csv")
+        vmfile = os.path.join(td, "vmstat.txt")
         cmd = ["java"] + args.java_opts.split() + ["-jar", jar,
                "--hosts", hosts, "--ensemble-size", str(cfg["ensemble_size"]),
                "--clients", str(cfg["clients"]), "--write-ratio", str(cfg["write_ratio"]),
                "--payload-bytes", str(cfg["payload_bytes"]), "--duration", str(args.duration),
                "--warmup", str(args.warmup), "--pool-size", "200", "--output", out, "--label", label]
-        r = subprocess.run(cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=600)
+        with open(vmfile, "w") as vf:
+            try:
+                vm = subprocess.Popen(["vmstat", "1"], stdout=vf, stderr=subprocess.DEVNULL)
+            except OSError:
+                vm = None
+            try:
+                r = subprocess.run(cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=600)
+            finally:
+                if vm:
+                    vm.terminate()
+                    vm.wait()
         lines = (r.stdout or "").count("\n")
         if lines > args.max_stdout_lines:
             raise RuntimeError(f"benchmark printed {lines} lines: the client is logging per operation "
                                f"(this throttles throughput). Fix logging, then re-run.")
         if r.returncode != 0 or not os.path.isfile(out):
             raise RuntimeError(f"benchmark failed:\n{r.stdout[-800:]}")
-        return list(csv.DictReader(open(out)))[-1]
+        row = list(csv.DictReader(open(out)))[-1]
+        busy = cpu_busy_pct(open(vmfile).read(), skip=int(args.warmup) + 3)
+        row["client_cpu_busy_pct"] = "" if busy is None else f"{busy:.1f}"
+        return row
 
 
 def main():
@@ -150,10 +182,17 @@ def main():
         from gce_backend import GceBackend
         be = GceBackend()
     new = not os.path.isfile(args.out)
+    if not new:
+        with open(args.out, newline="") as rf:
+            existing = next(csv.reader(rf), None)
+        if existing and existing != fields:
+            print(f"note: {args.out} has an older column set; appending with its header "
+                  f"(missing: {', '.join(c for c in fields if c not in existing) or 'none'})", flush=True)
+            fields = existing
     fh = None if args.dry_run else open(args.out, "a", newline="")
     wr = None
     if fh:
-        wr = csv.DictWriter(fh, fieldnames=fields)
+        wr = csv.DictWriter(fh, fieldnames=fields, extrasaction="ignore")
         if new:
             wr.writeheader()
     current_block, t0 = None, time.time()
@@ -180,7 +219,8 @@ def main():
             wr.writerow({k: rec.get(k, "") for k in fields})
             fh.flush()
             print(f"    -> {rec['throughput_ops_sec']} ops/s, write p99 {rec['write_p99_ms']} ms, "
-                  f"errors {rec['total_ops_err']}  (elapsed {(time.time()-t0)/60:.1f} min)", flush=True)
+                  f"errors {rec['total_ops_err']}, client CPU {rec['client_cpu_busy_pct'] or '?'}%  "
+                  f"(elapsed {(time.time()-t0)/60:.1f} min)", flush=True)
     finally:
         if fh:
             fh.close()

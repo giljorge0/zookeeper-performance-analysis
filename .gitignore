@@ -16,3 +16,8 @@ demo_plan/
 # GCE: contains internal IPs and your user name
 gce/cluster.env
 _cleanup_backup_*/
+# LaTeX build files (report/report.pdf itself is committed)
+report/*.aux
+report/*.out
+report/*.toc
+report/*.synctex.gz

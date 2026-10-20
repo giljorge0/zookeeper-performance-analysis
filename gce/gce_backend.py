@@ -66,7 +66,8 @@ class GceBackend:
             if p.wait() != 0:
                 raise RuntimeError(f"configuring {ip} failed:\n{out}")
         self._wait(ips)
-        self._verify(ips[0], disk, cfg["force_sync"])
+        for ip in ips:
+            self._verify(ip, disk, cfg["force_sync"])
 
     def _srvr(self, ip):
         try:
@@ -97,14 +98,18 @@ class GceBackend:
         raise RuntimeError(f"ensemble not ready: {modes}")
 
     def _verify(self, ip, disk, force_sync):
-        r = self._run(ip, "pgrep -af QuorumPeerMain | grep -c 'forceSync=no'; echo conf | nc -w2 localhost 2181 | grep -c " + f"zk-log-{disk}")
+        # The remote shell's own command line contains this command, so it must not match itself: '[Q]uorumPeerMain'
+        # matches the JVM but not the text "[Q]uorumPeerMain", and grep counts the JVM's arguments (from ps), not the
+        # process list. (The old 'pgrep -af QuorumPeerMain | grep -c forceSync=no' counted the shell too: always MISMATCH.)
+        r = self._run(ip, "ps -o args= -p \"$(pgrep -o -f '[Q]uorumPeerMain')\" | grep -c 'forceSync=no'; "
+                          f"echo conf | nc -w2 localhost 2181 | grep -c 'zk-log-{disk}'")
         vals = r.stdout.split()
-        fs_ok = (vals[0] == "1") == (force_sync == "no") if vals else False
-        disk_ok = vals[-1] == "1" if vals else False
-        print(f"    verify: forceSync flag {'OK' if fs_ok else 'MISMATCH'}, log dir on {disk} {'OK' if disk_ok else 'MISMATCH'}",
-              flush=True)
+        fs_ok = bool(vals) and (vals[0] == "1") == (force_sync == "no")
+        disk_ok = bool(vals) and vals[-1] == "1"
+        print(f"    verify {ip}: forceSync=no in JVM args: {vals[0] if vals else '?'} ({'OK' if fs_ok else 'MISMATCH'}), "
+              f"log dir on {disk}: {'OK' if disk_ok else 'MISMATCH'}", flush=True)
         if not (fs_ok and disk_ok):
-            raise RuntimeError("server configuration was not applied as requested")
+            raise RuntimeError(f"server configuration was not applied as requested on {ip}")
 
     def hosts(self, cfg):
         return ",".join(f"{ip}:2181" for ip in self.ips(cfg))

@@ -1,0 +1,317 @@
+{
+  "config": "GCE, 6 factors (single zone): 2^(6-1), F = ABCDE, resolution VI, 32 runs per replicate",
+  "factors": [
+    {
+      "name": "ensemble_size",
+      "param": "ensemble_size",
+      "low": 3,
+      "high": 5,
+      "hard": true,
+      "why": "quorum size: proposals and ACKs per write; the two usual production sizes",
+      "letter": "A"
+    },
+    {
+      "name": "write_ratio",
+      "param": "write_ratio",
+      "low": 0.1,
+      "high": 0.5,
+      "why": "share of requests that take the write pipeline (reads stay local)",
+      "letter": "B"
+    },
+    {
+      "name": "clients",
+      "param": "clients",
+      "low": 10,
+      "high": 160,
+      "why": "below the saturation knee vs well beyond it",
+      "letter": "C"
+    },
+    {
+      "name": "force_sync",
+      "param": "force_sync",
+      "low": "yes",
+      "high": "no",
+      "hard": true,
+      "why": "removes the fsync from the write path: tests the log-sync stage",
+      "letter": "D"
+    },
+    {
+      "name": "payload_bytes",
+      "param": "payload_bytes",
+      "low": 128,
+      "high": 4096,
+      "why": "bytes logged, sent to every follower and synced per write",
+      "letter": "E"
+    },
+    {
+      "name": "log_disk",
+      "param": "log_disk",
+      "low": "pd-balanced",
+      "high": "pd-ssd",
+      "hard": true,
+      "why": "speed of the device under the fsync (dedicated log disk)",
+      "letter": "F"
+    }
+  ],
+  "generators": {
+    "F": "ABCDE"
+  },
+  "defining_relation": [
+    "I",
+    "ABCDEF"
+  ],
+  "resolution": "VI",
+  "runs_per_replicate": 32,
+  "reps": 2,
+  "seed": 1,
+  "alias_classes": [
+    {
+      "effect": "A",
+      "order": 1,
+      "aliases": [
+        "BCDEF"
+      ],
+      "min_alias_order": 5
+    },
+    {
+      "effect": "B",
+      "order": 1,
+      "aliases": [
+        "ACDEF"
+      ],
+      "min_alias_order": 5
+    },
+    {
+      "effect": "C",
+      "order": 1,
+      "aliases": [
+        "ABDEF"
+      ],
+      "min_alias_order": 5
+    },
+    {
+      "effect": "D",
+      "order": 1,
+      "aliases": [
+        "ABCEF"
+      ],
+      "min_alias_order": 5
+    },
+    {
+      "effect": "E",
+      "order": 1,
+      "aliases": [
+        "ABCDF"
+      ],
+      "min_alias_order": 5
+    },
+    {
+      "effect": "F",
+      "order": 1,
+      "aliases": [
+        "ABCDE"
+      ],
+      "min_alias_order": 5
+    },
+    {
+      "effect": "AB",
+      "order": 2,
+      "aliases": [
+        "CDEF"
+      ],
+      "min_alias_order": 4
+    },
+    {
+      "effect": "AC",
+      "order": 2,
+      "aliases": [
+        "BDEF"
+      ],
+      "min_alias_order": 4
+    },
+    {
+      "effect": "AD",
+      "order": 2,
+      "aliases": [
+        "BCEF"
+      ],
+      "min_alias_order": 4
+    },
+    {
+      "effect": "AE",
+      "order": 2,
+      "aliases": [
+        "BCDF"
+      ],
+      "min_alias_order": 4
+    },
+    {
+      "effect": "AF",
+      "order": 2,
+      "aliases": [
+        "BCDE"
+      ],
+      "min_alias_order": 4
+    },
+    {
+      "effect": "BC",
+      "order": 2,
+      "aliases": [
+        "ADEF"
+      ],
+      "min_alias_order": 4
+    },
+    {
+      "effect": "BD",
+      "order": 2,
+      "aliases": [
+        "ACEF"
+      ],
+      "min_alias_order": 4
+    },
+    {
+      "effect": "BE",
+      "order": 2,
+      "aliases": [
+        "ACDF"
+      ],
+      "min_alias_order": 4
+    },
+    {
+      "effect": "BF",
+      "order": 2,
+      "aliases": [
+        "ACDE"
+      ],
+      "min_alias_order": 4
+    },
+    {
+      "effect": "CD",
+      "order": 2,
+      "aliases": [
+        "ABEF"
+      ],
+      "min_alias_order": 4
+    },
+    {
+      "effect": "CE",
+      "order": 2,
+      "aliases": [
+        "ABDF"
+      ],
+      "min_alias_order": 4
+    },
+    {
+      "effect": "CF",
+      "order": 2,
+      "aliases": [
+        "ABDE"
+      ],
+      "min_alias_order": 4
+    },
+    {
+      "effect": "DE",
+      "order": 2,
+      "aliases": [
+        "ABCF"
+      ],
+      "min_alias_order": 4
+    },
+    {
+      "effect": "DF",
+      "order": 2,
+      "aliases": [
+        "ABCE"
+      ],
+      "min_alias_order": 4
+    },
+    {
+      "effect": "EF",
+      "order": 2,
+      "aliases": [
+        "ABCD"
+      ],
+      "min_alias_order": 4
+    },
+    {
+      "effect": "ABC",
+      "order": 3,
+      "aliases": [
+        "DEF"
+      ],
+      "min_alias_order": 3
+    },
+    {
+      "effect": "ABD",
+      "order": 3,
+      "aliases": [
+        "CEF"
+      ],
+      "min_alias_order": 3
+    },
+    {
+      "effect": "ABE",
+      "order": 3,
+      "aliases": [
+        "CDF"
+      ],
+      "min_alias_order": 3
+    },
+    {
+      "effect": "ABF",
+      "order": 3,
+      "aliases": [
+        "CDE"
+      ],
+      "min_alias_order": 3
+    },
+    {
+      "effect": "ACD",
+      "order": 3,
+      "aliases": [
+        "BEF"
+      ],
+      "min_alias_order": 3
+    },
+    {
+      "effect": "ACE",
+      "order": 3,
+      "aliases": [
+        "BDF"
+      ],
+      "min_alias_order": 3
+    },
+    {
+      "effect": "ACF",
+      "order": 3,
+      "aliases": [
+        "BDE"
+      ],
+      "min_alias_order": 3
+    },
+    {
+      "effect": "ADE",
+      "order": 3,
+      "aliases": [
+        "BCF"
+      ],
+      "min_alias_order": 3
+    },
+    {
+      "effect": "ADF",
+      "order": 3,
+      "aliases": [
+        "BCE"
+      ],
+      "min_alias_order": 3
+    },
+    {
+      "effect": "AEF",
+      "order": 3,
+      "aliases": [
+        "BCD"
+      ],
+      "min_alias_order": 3
+    }
+  ]
+}

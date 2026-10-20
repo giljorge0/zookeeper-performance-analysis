@@ -6,6 +6,9 @@
 # state) is spread across levels instead of biasing the high-N end.
 # Also records the load generator's CPU use during every run: if the client
 # host is >~70% busy, the plateau may be the client, not ZooKeeper.
+# And snapshots ZooKeeper's own counters (`mntr`) of every server just before
+# and just after every run (usl/mntr/): usl/stage_breakdown.py turns them into
+# the time spent per pipeline stage on the leader, per load level.
 #
 # The ensemble must already be running (on GCE: your 3 server VMs).
 #   HOSTS="10.0.0.2:2181,10.0.0.3:2181,10.0.0.4:2181" ./run_usl_sweep.sh
@@ -28,6 +31,15 @@ if [ "${LOCAL:-0}" = "1" ]; then
   HOSTS=""; for ((i=0;i<ENSEMBLE_SIZE;i++)); do HOSTS+="127.0.0.1:$((2181+i)),"; done; HOSTS="${HOSTS%,}"
 fi
 [ -n "${HOSTS:-}" ] || { echo "set HOSTS=host:port,host:port,... (or LOCAL=1)"; exit 1; }
+MNTR_DIR="${MNTR_DIR:-usl/mntr}"
+{ [ -f "$OUT" ] || [ -n "$(ls -A "$MNTR_DIR" 2>/dev/null)" ]; } && \
+  echo "WARNING: $OUT or $MNTR_DIR already has data; this sweep appends to it (move both aside for a fresh curve)"
+mkdir -p "$MNTR_DIR"
+snap() {  # snap before|after : mntr of every server -> $MNTR_DIR/<run>_n<N>_r<rep>_<when>_<host>_<port>.txt
+  for hp in ${HOSTS//,/ }; do
+    echo mntr | nc -w2 "${hp%:*}" "${hp##*:}" > "$MNTR_DIR/$(printf %03d "$I")_n${n}_r${rep}_$1_${hp%:*}_${hp##*:}.txt" 2>/dev/null
+  done
+}
 
 # warm the JIT and the servers once; this point is discarded
 java $JAVA_OPTS -jar "$JAR" --hosts "$HOSTS" --ensemble-size "$ENSEMBLE_SIZE" --clients 8 \
@@ -39,12 +51,14 @@ TOTAL=$(echo "$PAIRS" | wc -l); I=0
 echo "$TOTAL runs, random order, ~$((TOTAL * (DURATION + WARMUP + 12) / 60)) min"
 while read -r n rep; do
   I=$((I+1))
+  snap before
   vmstat 1 $((WARMUP + DURATION + 2)) > /tmp/vm.$$ 2>/dev/null &
   VM=$!
   OUTLINE=$(java $JAVA_OPTS -jar "$JAR" --hosts "$HOSTS" --ensemble-size "$ENSEMBLE_SIZE" --clients "$n" \
       --write-ratio "$WRITE_RATIO" --duration "$DURATION" --warmup "$WARMUP" --pool-size 200 \
       --output "$OUT" --label "usl-r$rep" 2>&1 | tee /tmp/bench.$$ | grep -c '')
   kill $VM 2>/dev/null; wait $VM 2>/dev/null
+  snap after
   BUSY=$(awk -v s=$((WARMUP+3)) 'NR>s+2 && $15 ~ /^[0-9]+$/ {sum+=100-$15; c++} END{if(c) printf "%.0f", sum/c}' /tmp/vm.$$)
   echo "$n,$rep,${BUSY:-NA}" >> "$CPU_OUT"
   printf '[%d/%d] N=%-4s rep=%s  %s  client CPU %s%%  (stdout lines: %s)\n' "$I" "$TOTAL" "$n" "$rep" \
@@ -53,6 +67,7 @@ while read -r n rep; do
 done <<< "$PAIRS"
 rm -f /tmp/vm.$$ /tmp/bench.$$
 [ "${LOCAL:-0}" = "1" ] && stop_ensemble >/dev/null 2>&1
-echo "done -> $OUT, $CPU_OUT"
+echo "done -> $OUT, $CPU_OUT, $MNTR_DIR/"
 echo "fit: python3 usl/usl_single_fit.py --input $OUT --ensemble-size $ENSEMBLE_SIZE --write-ratio $WRITE_RATIO --outdir usl/out"
+echo "stages: python3 usl/stage_breakdown.py --mntr $MNTR_DIR --outdir usl/out --tex report/stage_breakdown.tex"
 echo "max client CPU: $(sort -t, -k3 -n $CPU_OUT | tail -1)   (investigate if above ~70)"

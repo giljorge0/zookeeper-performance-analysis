@@ -1,28 +1,67 @@
 #!/usr/bin/env python3
 """
-summarize.py - turns the raw output of run_probes.sh into a table for the report.
+summarize.py - turns eBPF probe runs into the tables of the report.
 
-Each argument is LABEL=DIR, where DIR is an output directory of run_probes.sh. Compare configurations side by
-side, e.g. forceSync on vs. off, or pd-balanced vs. pd-ssd:
+Each argument is LABEL=DIR. DIR holds one probe run: the files written by run_probes.sh and, when the run was made
+by gce/run_ebpf_experiment.sh, also config.txt, bench.csv, bench_noprobe.csv and mntr_{before,after}_<server>.txt.
 
-  python3 summarize.py fsync_on=/tmp/probe_on fsync_off=/tmp/probe_off --tex ../report/ebpf_summary.tex
+  python3 ebpf/summarize.py fsync_yes_ssd=ebpf_results_gce/fsync_yes_ssd fsync_no_ssd=ebpf_results_gce/fsync_no_ssd \
+      --tex report/ebpf_summary.tex --json ebpf_results_gce/summary.json
 
-Parsed: fsync latency histogram (bpftrace), block I/O latency histogram (bcc biolatency, all disks merged),
-run-queue latency histogram (bcc runqlat), TCP retransmit total (bpftrace). Percentiles are upper bounds of the
-histogram bucket that contains them.
+Parsed:
+  fsync_latency.txt  bpftrace: fsync/fdatasync calls of the ZooKeeper JVM and their latency histogram
+  biolatency.txt     bcc biolatency -D: block I/O latency per disk. Only the active LOG disk is kept when meta.txt
+                     names the log devices (Compute Engine); otherwise all disks are merged
+  runqlat.txt        bcc runqlat -p PID: run-queue latency of the JVM's threads (microseconds)
+  tcp_retrans.txt    bpftrace: TCP retransmissions and resets sent (whole host)
+  zk_threads.txt     bpftrace: on-CPU samples per JVM thread name at 99 Hz -> CPU cores used per pipeline stage
+  bench*.csv         benchmark rows with and without the probes -> throughput and probe overhead
+  mntr_*.txt         ZooKeeper's own counters on the leader around the probed run -> requests per fsync (group
+                     commit), ZooKeeper's fsync time, time until quorum ACK
+Histogram percentiles are the upper bound of the bucket that contains them.
+
+Writes, with --tex T: T (operating-system view, from eBPF), T with suffix _zk (ZooKeeper's view and probe overhead)
+and T with suffix _threads (CPU per pipeline stage); --json: every field.
 """
 import argparse
+import csv
+import glob
 import json
 import os
 import re
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(HERE, "..", "usl"))
+from stage_breakdown import avg_delta, leader_of, load_mntr, pooled_delta  # noqa: E402
 
 BPFTRACE_BUCKET = re.compile(r"^\[(\d+[KMG]?)(?:,\s*(\d+[KMG]?))?\)?\]?\s+(\d+)\s+\|")
-SUFFIX = {"K": 1024, "M": 1024 ** 2, "G": 1024 ** 3}
-
-
-def num(tok):
-    return int(tok[:-1]) * SUFFIX[tok[-1]] if tok[-1] in SUFFIX else int(tok)
 BCC_BUCKET = re.compile(r"^\s*(\d+)\s*->\s*(\d+)\s*:\s*(\d+)\s*\|")
+BCC_DISK = re.compile(r"^\s*disk\s*=\s*(?:b?['\"])?([^'\"\s]+)")
+SAMPLES = re.compile(r"^@samples\[(.*)\]:\s*(\d+)\s*$")
+SUFFIX = {"K": 1024, "M": 1024 ** 2, "G": 1024 ** 3}
+HZ = 99  # zk_threads.bt samples every CPU 99 times per second
+
+# Prefix of the (15-character) JVM thread name -> pipeline stage, for ZooKeeper 3.9.
+STAGES = [
+    ("ProcessThread", "PrepRequestProcessor (zxid)"),
+    ("SyncThread", "SyncRequestProcessor (log, fsync)"),
+    ("CommitProcWork", "commit workers (apply, reply)"),
+    ("CommitProcessor", "CommitProcessor"),
+    ("LearnerHandler", "replication to followers"),
+    ("Sender-", "replication to followers"),
+    ("QuorumPeer", "quorum peer main loop"),
+    ("FollowerReques", "FollowerRequestProcessor"),
+    ("RequestThrottle", "request throttler"),
+    ("NIOWorkerThread", "client connections (I/O)"),
+    ("NIOServerCxnFac", "client connections (I/O)"),
+    ("GC Thread", "garbage collection"),
+    ("G1 ", "garbage collection"),
+    ("C1 CompilerThre", "JIT compiler"),
+    ("C2 CompilerThre", "JIT compiler"),
+]
+ZK_METRICS = ["sync_processor_batch_size", "fsynctime", "sync_processor_queue_and_flush_time_ms",
+              "quorum_ack_latency", "prep_processor_queue_time_ms", "updatelatency"]
 
 
 def read(path):
@@ -32,8 +71,24 @@ def read(path):
         return ""
 
 
+def kv(text):
+    """key=value tokens (space or newline separated) -> dict."""
+    return dict(t.split("=", 1) for t in text.split() if "=" in t)
+
+
+def num(tok):
+    return int(tok[:-1]) * SUFFIX[tok[-1]] if tok[-1] in SUFFIX else int(tok)
+
+
+def fnum(v):
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
 def buckets_bpftrace(text, name):
-    """Buckets of the histogram map @name."""
+    """Buckets (lo, hi, count) of the bpftrace histogram map @name."""
     out, on = [], False
     for line in text.splitlines():
         if line.startswith(f"@{name}:"):
@@ -53,12 +108,21 @@ def buckets_bpftrace(text, name):
 
 
 def buckets_bcc(text):
-    out = []
+    """bcc log2 histograms -> {section: [(lo, hi, count)]}; section is the disk name for biolatency -D, else None."""
+    out, section = {}, None
     for line in text.splitlines():
+        d = BCC_DISK.match(line)
+        if d:
+            section = d.group(1)
+            continue
         m = BCC_BUCKET.match(line)
         if m:
-            out.append((int(m.group(1)), int(m.group(2)), int(m.group(3))))
+            out.setdefault(section, []).append((int(m.group(1)), int(m.group(2)), int(m.group(3))))
     return out
+
+
+def merged(sections):
+    return [b for v in sections.values() for b in v]
 
 
 def pct(buckets, p):
@@ -78,50 +142,156 @@ def scalar(text, name):
     return int(m.group(1)) if m else None
 
 
+def stage_of(thread):
+    for prefix, stage in STAGES:
+        if thread.startswith(prefix):
+            return stage
+    return "other"
+
+
+def last_row(path):
+    try:
+        rows = list(csv.DictReader(open(path, newline="")))
+    except OSError:
+        return {}
+    return rows[-1] if rows else {}
+
+
+def leader_mntr(d):
+    """ZooKeeper's per-stage means on the leader over the probed run (delta of the before/after snapshots)."""
+    def snaps(when):
+        return {os.path.basename(p)[len(f"mntr_{when}_"):-4]: load_mntr(p)
+                for p in glob.glob(os.path.join(d, f"mntr_{when}_*.txt"))}
+    before, after = snaps("before"), snaps("after")
+    lead = leader_of(after) or leader_of(before)
+    if not lead or lead not in before or lead not in after:
+        return {}
+    out = {m: avg_delta(before[lead], after[lead], m) for m in ZK_METRICS}
+    out["updatelatency"] = pooled_delta(before, after, "updatelatency")   # counted where the client is connected
+    out["leader"] = lead
+    return out
+
+
 def summarize(d):
+    cfg = kv(read(os.path.join(d, "config.txt")))
+    meta = kv(read(os.path.join(d, "meta.txt")))
     fs = read(os.path.join(d, "fsync_latency.txt"))
     fb = buckets_bpftrace(fs, "fsync_latency_us")
-    bio = buckets_bcc(read(os.path.join(d, "biolatency.txt")))
-    rq = buckets_bcc(read(os.path.join(d, "runqlat.txt")))
+    bio_sections = buckets_bcc(read(os.path.join(d, "biolatency.txt")))
+    dev = meta.get(f"logdev_{cfg.get('log_disk', '')}")
+    if dev and dev in bio_sections:
+        bio, bio_scope = bio_sections[dev], f"log disk ({dev})"
+    else:
+        bio, bio_scope = merged(bio_sections), "all disks"
+    rq = merged(buckets_bcc(read(os.path.join(d, "runqlat.txt"))))
     tcp = read(os.path.join(d, "tcp_retrans.txt"))
+    th = read(os.path.join(d, "zk_threads.txt"))
+    samples = {m.group(1): int(m.group(2)) for m in map(SAMPLES.match, th.splitlines()) if m}
+    seconds = scalar(th, "seconds") or fnum(meta.get("duration"))
+    cores = {t: n / (HZ * seconds) for t, n in samples.items()} if seconds else {}
+    stages = {}
+    for t, c in cores.items():
+        stages[stage_of(t)] = stages.get(stage_of(t), 0.0) + c
+    b, b0 = last_row(os.path.join(d, "bench.csv")), last_row(os.path.join(d, "bench_noprobe.csv"))
+    x, x0 = fnum(b.get("throughput_ops_sec")), fnum(b0.get("throughput_ops_sec"))
     return {
+        "config": cfg,
         "fsync_calls": scalar(fs, "fsync_calls") or 0,
         "fsync_p50_us": pct(fb, 0.50), "fsync_p99_us": pct(fb, 0.99), "fsync_max_us": scalar(fs, "fsync_max_us"),
-        "bio_ios": sum(c for _, _, c in bio), "bio_p50_us": pct(bio, 0.50), "bio_p99_us": pct(bio, 0.99),
-        "runq_events": sum(c for _, _, c in rq), "runq_p50": pct(rq, 0.50), "runq_p99": pct(rq, 0.99),
-        "tcp_retransmits": scalar(tcp, "retransmits") or 0,
+        "bio_scope": bio_scope, "bio_ios": sum(c for _, _, c in bio),
+        "bio_p50_us": pct(bio, 0.50), "bio_p99_us": pct(bio, 0.99),
+        "runq_events": sum(c for _, _, c in rq), "runq_p50_us": pct(rq, 0.50), "runq_p99_us": pct(rq, 0.99),
+        "tcp_retransmits": scalar(tcp, "retransmits") or 0, "tcp_resets_sent": scalar(tcp, "resets_sent") or 0,
+        "probe_seconds": seconds, "jvm_cores": sum(cores.values()) if cores else None,
+        "stage_cores": dict(sorted(stages.items(), key=lambda kv_: -kv_[1])),
+        "thread_cores": dict(sorted(cores.items(), key=lambda kv_: -kv_[1])[:12]),
+        "throughput": x, "throughput_noprobe": x0,
+        "probe_overhead_pct": 100 * (1 - x / x0) if x and x0 else None,
+        "write_p50_ms": fnum(b.get("write_p50_ms")), "errors": fnum(b.get("total_ops_err")),
+        "zk": leader_mntr(d),
     }
 
 
-def fmt(v):
-    return "--" if v is None else str(v)
+def fmt(v, nd=None):
+    if v is None:
+        return "--"
+    if isinstance(v, int) or nd == 0:
+        return f"{v:.0f}"
+    if nd is not None:
+        return f"{v:.{nd}f}"
+    return f"{v:.0f}" if abs(v) >= 100 else f"{v:.1f}" if abs(v) >= 10 else f"{v:.2f}"
+
+
+def nice_label(label, r):
+    c = r["config"]
+    if "force_sync" in c and "log_disk" in c:
+        return f"fsync {'on' if c['force_sync'] == 'yes' else 'off'}, pd-{c['log_disk']}"
+    return label.replace("_", "\\_")
+
+
+def table(path, header, rows):
+    with open(path, "w") as fh:
+        fh.write("\\begin{tabular}{@{}l" + "r" * (len(header) - 1) + "@{}}\n\\toprule\n" + " & ".join(header)
+                 + " \\\\\n\\midrule\n")
+        for row in rows:
+            fh.write(" & ".join(row) + " \\\\\n")
+        fh.write("\\bottomrule\n\\end{tabular}\n")
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("runs", nargs="+", help="LABEL=DIR")
-    ap.add_argument("--tex")
+    ap.add_argument("--tex", help="base name of the LaTeX tables, e.g. report/ebpf_summary.tex")
     ap.add_argument("--json")
     a = ap.parse_args()
     res = {}
     for spec in a.runs:
         label, d = spec.split("=", 1)
         res[label] = summarize(d)
-    cols = [("fsync_calls", "fsync calls"), ("fsync_p50_us", "fsync p50 ($\\mu$s)"), ("fsync_p99_us", "fsync p99 ($\\mu$s)"),
-            ("bio_p99_us", "disk I/O p99 ($\\mu$s)"), ("runq_p99", "run-queue p99 (ms)"), ("tcp_retransmits", "TCP retrans.")]
-    print(f"{'config':<14}" + "".join(f"{c[1].replace('$\\\\mu$','u'):>22}" for c in cols))
+
+    os_cols = [("fsync_calls", "fsync calls", 0), ("fsync_p50_us", "fsync p50 ($\\mu$s)", 0),
+               ("fsync_p99_us", "fsync p99 ($\\mu$s)", 0), ("bio_p99_us", "log-disk I/O p99 ($\\mu$s)", 0),
+               ("runq_p99_us", "run queue p99 ($\\mu$s)", 0), ("tcp_retransmits", "TCP retr.", 0)]
+    plain = [h.replace("$\\mu$", "u") for _, h, _ in os_cols]
+    print(f"{'config':<22}" + "".join(f"{h:>24}" for h in plain))
     for label, r in res.items():
-        print(f"{label:<14}" + "".join(f"{fmt(r[k]):>22}" for k, _ in cols))
+        print(f"{label:<22}" + "".join(f"{fmt(r[k], nd):>24}" for k, _, nd in os_cols))
+    print()
+    print(f"{'config':<22}{'ops/s':>10}{'no probes':>11}{'overhead%':>11}{'req/fsync':>11}{'ZK fsync ms':>13}"
+          f"{'quorum ACK ms':>15}{'JVM cores':>11}  top stages")
+    for label, r in res.items():
+        z = r["zk"]
+        top = ", ".join(f"{s} {c:.2f}" for s, c in list(r["stage_cores"].items())[:3])
+        print(f"{label:<22}{fmt(r['throughput'], 0):>10}{fmt(r['throughput_noprobe'], 0):>11}"
+              f"{fmt(r['probe_overhead_pct'], 1):>11}{fmt(z.get('sync_processor_batch_size'), 1):>11}"
+              f"{fmt(z.get('fsynctime'), 2):>13}{fmt(z.get('quorum_ack_latency'), 2):>15}{fmt(r['jvm_cores'], 2):>11}  {top}")
+    for label, r in res.items():
+        if r["bio_scope"] == "all disks" and r["bio_ios"]:
+            print(f"note: {label}: log device unknown, block I/O of all disks merged")
+
     if a.json:
         json.dump(res, open(a.json, "w"), indent=2)
+        print("wrote", a.json)
     if a.tex:
-        with open(a.tex, "w") as fh:
-            fh.write("\\begin{tabular}{@{}l" + "r" * len(cols) + "@{}}\n\\toprule\nConfiguration & "
-                     + " & ".join(c[1] for c in cols) + " \\\\\n\\midrule\n")
-            for label, r in res.items():
-                fh.write(label.replace("_", "\\_") + " & " + " & ".join(fmt(r[k]) for k, _ in cols) + " \\\\\n")
-            fh.write("\\bottomrule\n\\end{tabular}\n")
-        print("wrote", a.tex)
+        base = a.tex[:-4] if a.tex.endswith(".tex") else a.tex
+        table(f"{base}.tex", ["Configuration"] + [h for _, h, _ in os_cols],
+              [[nice_label(l, r)] + [fmt(r[k], nd) for k, _, nd in os_cols] for l, r in res.items()])
+        table(f"{base}_zk.tex",
+              ["Configuration", "ops/s", "ops/s, no probes", "overhead (\\%)", "requests/fsync", "ZK fsync (ms)",
+               "until quorum ACK (ms)"],
+              [[nice_label(l, r), fmt(r["throughput"], 0), fmt(r["throughput_noprobe"], 0),
+                fmt(r["probe_overhead_pct"], 1), fmt(r["zk"].get("sync_processor_batch_size"), 1),
+                fmt(r["zk"].get("fsynctime"), 2), fmt(r["zk"].get("quorum_ack_latency"), 2)] for l, r in res.items()])
+        stages = []
+        for r in res.values():
+            for s in r["stage_cores"]:
+                if s not in stages and s != "other":
+                    stages.append(s)
+        stages.sort(key=lambda s: -max(r["stage_cores"].get(s, 0) for r in res.values()))
+        rows = [[s] + [fmt(r["stage_cores"].get(s), 2) for r in res.values()] for s in stages[:7]]
+        rows.append(["whole JVM"] + [fmt(r["jvm_cores"], 2) for r in res.values()])
+        table(f"{base}_threads.tex", ["CPU cores used by"] + [nice_label(l, r) for l, r in res.items()], rows)
+        print(f"wrote {base}.tex, {base}_zk.tex, {base}_threads.tex")
 
 
 if __name__ == "__main__":

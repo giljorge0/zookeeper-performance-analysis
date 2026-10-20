@@ -9,14 +9,15 @@
 #   ./scale_ensemble.sh stop
 #
 # Client ports on the host are published starting at 2181 (zk1 -> 2181,
-# zk2 -> 2182, ...). AdminServer HTTP ports start at 8081 (zk1 -> 8081, ...).
+# zk2 -> 2182, ...). AdminServer HTTP ports start at 18081 (zk1 -> 18081, ...);
+# set ZK_ADMIN_BASE_PORT to move them if those ports are taken (8081/8082 often are).
 
 set -euo pipefail
 
 IMAGE="zookeeper:3.9"
 NETWORK="zknet-bench"
 BASE_CLIENT_PORT=2181
-BASE_ADMIN_PORT=8081
+BASE_ADMIN_PORT="${ZK_ADMIN_BASE_PORT:-18081}"
 FOURLW_WHITELIST="srvr,stat,mntr,conf,cons,ruok,wchs"
 
 build_server_list() {

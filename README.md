@@ -9,7 +9,7 @@ through one leader and needs a quorum. This repository measures where that write
 | | Stage I (one host) | Stage II (Google Compute Engine) |
 |---|---|---|
 | Question | How does throughput scale with the number of clients? | Which factors and which pipeline stage limit it? |
-| Method | Concurrency sweeps + Universal Scalability Law (USL) fits, YCSB cross-check, failover, network delay | 2^(6-1) fractional factorial experiment, one replicated USL curve, four eBPF probes |
+| Method | Concurrency sweeps + Universal Scalability Law (USL) fits, YCSB cross-check, failover, network delay | 2^(6-1) fractional factorial experiment, one replicated USL curve with a per-stage breakdown, five eBPF probes |
 | Code | `java-benchmark/`, `run_java_*.sh`, `usl_fit.py`, `run_ycsb.sh` | `factorial/`, `usl/`, `gce/`, `ebpf/` |
 
 The report is `report/report.tex` (LNCS format). Everything it states is produced by code in this repository.
@@ -49,8 +49,9 @@ Established with the data in this repository:
   delayed hop), median write latency 106 ms (about five hops), which matches the write pipeline.
 - **Leader failover:** ZooKeeper reports 211 ms (first run) and 216–235 ms (repetition) for the election phase.
 
-Stage II results (factorial effects, the single USL fit, eBPF measurements) are added to the report after the Compute Engine runs;
-the code that produces them is complete and validated on synthetic data (see [Tests](#tests)).
+Stage II results (factorial effects, the single USL fit and its per-stage breakdown, eBPF measurements) are added to the
+report after the Compute Engine runs; the code that produces them is complete and validated on synthetic data and on a
+local Docker ensemble (see [Tests](#tests)).
 
 ---
 
@@ -80,30 +81,41 @@ pipeline_analysis.md           Stage I write-up of the request pipelines
 
 ── Stage II ─────────────────────────────────────────────────────────────────────────────────────────
 usl/                           ONE USL curve: dense load levels, replicates, random order
-  run_usl_sweep.sh               data collection (records client CPU for every run)
+  run_usl_sweep.sh               data collection: client CPU for every run, `mntr` of every server before/after it
   usl_single_fit.py              weighted fit, bootstrap CIs, USL-vs-Amdahl test, hold-out validation
   make_usl_tex.py                writes the results paragraph of the report from the fit
+  stage_breakdown.py             ZooKeeper's per-stage counters (mntr) -> time per pipeline stage on the leader vs N
+  selftest_usl.py, test_stage_breakdown.py   validation on synthetic data
 factorial/                     2^(6-1) fractional factorial experiment
-  factors_gce6.json              the six factors and levels (factors_pilot.json: 7-factor local pilot)
+  factors_gce6.json              the six factors and levels on Compute Engine
+  factors_local6.json            the same design on Docker (log disk -> disk vs tmpfs); used by demo.sh
+  factors_pilot.json             earlier 7-factor local pilot (with a CPU-quota factor); used by the self-tests
+  plan_gce/                      the plan that was run: plan.csv (run order), sign_table.csv, design_meta.json
   design.py                      sign table, defining relation, resolution, aliases, randomized blocked plan
-  run_plan.py                    executes a plan (docker backend locally, gce backend on the client VM)
+  run_plan.py                    executes a plan (docker backend locally, gce backend on the client VM); records client CPU
   analyze.py                     effects, allocation of variation, confidence intervals, residual checks
   plots.py, make_tex.py          main-effect/interaction plots and LaTeX tables
   selftest.py, test_pipeline.py  validation without any servers
 gce/                           Google Compute Engine
-  create_infra.sh                creates the client VM and the server VMs (+ log disks), writes cluster.env
-  gce_backend.py                 (re)configures the ZooKeeper ensemble on the server VMs over ssh
+  create_infra.sh                creates the client VM and 5 server VMs (+ 2 log disks each), writes cluster.env
+  vm_jobs.sh                     every experiment job on the client VM: smoke, factorial, usl, ebpf, facts, pack
+  gce_backend.py                 (re)configures the ZooKeeper ensemble on the server VMs over ssh and verifies it
+  run_ebpf_experiment.sh         probes on the leader for forceSync x log disk, with and without probes, + mntr
   zk_configure.sh                runs on a server: zoo.cfg, myid, forceSync, log directory, start
   server_startup.sh, client_startup.sh   VM provisioning scripts
-  stop_infra.sh, start_infra.sh, delete_infra.sh
-ebpf/                          four probes
+  stop_infra.sh, start_infra.sh, delete_infra.sh   act on every zk* VM of the project
+  test_verify.py                 checks the server-configuration verification locally
+ebpf/                          five probes
   fsync_latency.bt               bpftrace: fsync/fdatasync latency of the ZooKeeper JVM
   tcp_retrans.bt                 bpftrace: TCP retransmissions and resets
-  run_probes.sh                  runs the two bpftrace probes plus bcc biolatency and runqlat
-  summarize.py                   turns probe output into a comparison table
+  zk_threads.bt                  bpftrace: CPU per JVM thread, i.e. per pipeline stage (99 Hz sampling)
+  run_probes.sh                  runs the three bpftrace probes plus bcc biolatency and runqlat
+  summarize.py                   probe output, benchmark rows and mntr deltas -> comparison tables
+  test_summarize.py              checks the parsers on synthetic bpftrace/bcc output
 
 ── Report ───────────────────────────────────────────────────────────────────────────────────────────
-report/report.tex              the report (needs llncs.cls); generated tables and figures are read from report/
+report/report.tex              the Stage II report (LNCS); generated tables and figures are read from report/
+report/stage1_report.tex       the Stage I report, as it was at the Stage I commit (7640029)
 ```
 
 Result files (`results_java*.csv`, `chaos_results_java.csv`, `ycsb_results/`, `usl_plots_*`): the `*_noisy.csv` files were
@@ -115,8 +127,8 @@ collected before the logging fix and are kept only for the before/after comparis
 
 | For | You need |
 |---|---|
-| Everything | Linux, Python 3.9+ with `pip install -r requirements.txt` |
-| Local runs (demo, Stage I, pilot) | Docker, JDK 11+, Maven |
+| Everything | Linux, Python 3.9+; the analysis needs `pip install -r requirements.txt` (the demo and the runners need only the standard library) |
+| Local runs (demo, Stage I, pilot) | Docker, JDK 11+, Maven; free host ports 2181-2185 and 18081-18085 |
 | Network-delay experiment | Docker access to `/var/run/docker.sock` (Pumba) |
 | YCSB | JDK 8+, Maven (`run_ycsb.sh` builds YCSB's ZooKeeper binding from source) |
 | Compute Engine runs | `gcloud` logged in to a project with billing enabled; the runs execute on the client VM |
@@ -138,8 +150,11 @@ pip install -r requirements.txt
 1. builds the load generator,
 2. starts a **3-server ZooKeeper ensemble** with `docker run`,
 3. runs a **10 s benchmark** (20 clients, 30 % writes) and checks that the client output is quiet,
-4. generates a fractional factorial plan and **executes its first three runs** with the real runner,
+4. generates the **2^(6-1) plan of the Stage II experiment** (locally the log-disk factor is disk vs tmpfs) and
+   **executes its first three runs** with the real runner (server rebuild, verification, benchmark, client CPU),
 5. validates the design and analysis code on synthetic data with known effects.
+
+It uses host ports 2181-2185 (clients) and 18081-18083 (AdminServer); set `ZK_ADMIN_BASE_PORT` if those are taken.
 
 One measurement point by hand:
 
@@ -172,72 +187,55 @@ python3 check_chaos.py --healthy results_java.csv --chaos chaos_results_java.csv
 
 Close other applications first: a laptop that is busy, hot or low on memory gives unreliable numbers.
 
-### Local pilot of the factorial experiment (no cloud needed, ~25 min)
+### The factorial design locally (no cloud; for checking the pipeline only)
 
 ```bash
-python3 factorial/design.py --factors factorial/factors_pilot.json --generator E=ABC --generator F=BCD \
-    --generator G=ACD --reps 2 --seed 1 --outdir factorial/plan_local
+python3 factorial/design.py --factors factorial/factors_local6.json --reps 2 --seed 1 --outdir factorial/plan_local6
 JAR=$(ls java-benchmark/target/*.jar | grep -v original | head -1)
-python3 factorial/run_plan.py --plan factorial/plan_local/plan.csv --jar $JAR \
-    --out factorial/results_local.csv --duration 10 --warmup 3
-python3 factorial/analyze.py --results factorial/results_local.csv --meta factorial/plan_local/design_meta.json \
-    --response throughput_ops_sec --response write_p99_ms --outdir factorial/analysis_local
+python3 factorial/run_plan.py --plan factorial/plan_local6/plan.csv --jar $JAR \
+    --out factorial/results_local6.csv --duration 10 --warmup 3                    # ~35 min, resumable
+python3 factorial/analyze.py --results factorial/results_local6.csv --meta factorial/plan_local6/design_meta.json \
+    --response throughput_ops_sec --response write_p99_ms --outdir factorial/analysis_local6
+LOCAL=1 ./usl/run_usl_sweep.sh                                                     # the USL sweep on Docker
+sudo ./ebpf/local_probe_check.sh                                                   # the five probes on the local leader
 ```
 
-The pilot uses a 16-run resolution-IV design (7 factors; the log "disk" factor is tmpfs against disk). It validates the whole
-pipeline but its numbers inherit the noise of a laptop.
+The same 2^(6-1) design as on Compute Engine, with the log-disk factor replaced by transaction log on disk vs tmpfs. It
+exercises the whole pipeline, but on one machine the servers, the client and anything else running share the CPUs
+(`client_cpu_busy_pct` shows it), so its numbers are not used in the report.
 
 ### Stage II on Google Compute Engine
 
-Commands marked *(laptop)* run on your machine; the others run on the **client VM**.
+Commands marked *(laptop)* run on your machine; the jobs run on the **client VM** (`zkclient`), inside tmux.
 
 ```bash
-# (laptop) one-time: gcloud auth login; gcloud config set project <PROJECT_ID>; billing must be enabled
-WITH_Z3=0 ./gce/create_infra.sh                 # (laptop) client VM + server VMs, writes gce/cluster.env (~10 min)
-tar --exclude=venv --exclude=ycsb-src --exclude=.git -czf /tmp/repo.tgz -C .. <repository>   # (laptop)
-gcloud compute scp /tmp/repo.tgz ~/.ssh/google_compute_engine zkclient:~ --zone <zone>      # (laptop)
-gcloud compute ssh zkclient --zone <zone>                                                    # (laptop)
+# (laptop) one-time: gcloud auth login; gcloud config set project <PROJECT_ID>; billing enabled; ~18 vCPUs of quota
+./gce/create_infra.sh                            # (laptop) zkclient + zk1..zk5 with 2 log disks each, gce/cluster.env (~10 min)
+tar --exclude=.git --exclude=java-benchmark/target -czf /tmp/repo.tgz -C .. <repository>   # (laptop) includes cluster.env
+gcloud compute scp /tmp/repo.tgz ~/.ssh/google_compute_engine zkclient:~ --zone europe-west1-b  # (laptop)
+gcloud compute ssh zkclient --zone europe-west1-b                                              # (laptop)
 mkdir -p ~/.ssh && mv ~/google_compute_engine ~/.ssh/ && chmod 600 ~/.ssh/google_compute_engine
-tar xzf repo.tgz && cd <repository>
-(cd java-benchmark && mvn -q -DskipTests clean package)
-tmux new -s run                                 # long runs inside tmux
+tar xzf repo.tgz && cd <repository> && (cd java-benchmark && mvn -q -DskipTests clean package)
 ```
 
-**1. Smoke test.**
+Then, on the client VM, one job after the other (each ends with `JOB <name> FINISHED rc=0`):
+
+| Job | What it does | Time |
+|---|---|---|
+| `bash gce/vm_jobs.sh smoke` | configures and **verifies** both forceSync levels, a 10 s benchmark, a short probe run | ~5 min |
+| `tmux new -d -s factorial 'bash gce/vm_jobs.sh factorial 2>&1 \| tee -a ~/factorial.log'` | the 64 runs of `factorial/plan_gce/plan.csv` (8 as a check first; resumes if interrupted), then the analysis | ~45 min |
+| `tmux new -d -s usl 'bash gce/vm_jobs.sh usl 2>&1 \| tee -a ~/usl.log'` | the USL curve (13 client counts × 3 replicates, random order, client CPU and `mntr` per run), the fit, the per-stage breakdown | ~30 min |
+| `tmux new -d -s ebpf 'bash gce/vm_jobs.sh ebpf 2>&1 \| tee -a ~/ebpf.log'` | the five probes on the leader for forceSync × log disk (80 clients, 50 % writes), with an overhead baseline | ~12 min |
+| `bash gce/vm_jobs.sh facts` | versions, CPUs, memory and disks of every VM -> `gce/testbed_facts.txt` | 1 min |
+| `bash gce/vm_jobs.sh pack` | results and logs -> `~/results.tgz` | |
+
 ```bash
-python3 gce/gce_backend.py up --group z1 --n 3 --log-disk ssd --force-sync yes     # prints HOSTS=...
-export HOSTS=<printed value>
-java -jar $(ls java-benchmark/target/*.jar | grep -v original | head -1) --hosts $HOSTS --ensemble-size 3 \
-     --clients 20 --write-ratio 0.3 --duration 10 --warmup 3 --output /tmp/smoke.csv
+gcloud compute scp zkclient:~/results.tgz . --zone europe-west1-b && tar xzf results.tgz     # (laptop, repo root)
+./gce/stop_infra.sh          # (laptop) stops every zk* VM (disks kept);  ./gce/start_infra.sh resumes;  ./gce/delete_infra.sh at the end
 ```
 
-**2. One USL curve (~30 min).** 13 client counts × 3 replicates in random order, client CPU recorded per run.
-```bash
-HOSTS=$HOSTS ./usl/run_usl_sweep.sh
-python3 usl/usl_single_fit.py --input usl/usl_single.csv --ensemble-size 3 --write-ratio 0.3 --outdir usl/out
-python3 usl/make_usl_tex.py --fit usl/out/usl_single_fit.json --data usl/usl_single.csv --out report/usl_text.tex
-```
-Check the maximum of the client-CPU column it prints: above ~70 % the plateau may be the client.
-
-**3. Factorial experiment (~1 h for 2 replicates).**
-```bash
-python3 factorial/design.py --factors factorial/factors_gce6.json --reps 2 --seed 1 --outdir factorial/plan_gce
-JAR=$(ls java-benchmark/target/*.jar | grep -v original | head -1)
-python3 factorial/run_plan.py --backend gce --plan factorial/plan_gce/plan.csv --jar $JAR \
-    --java-opts "-Xms1g -Xmx2g" --out factorial/results_gce.csv --duration 20 --warmup 5 --limit 8   # smoke test
-python3 factorial/run_plan.py --backend gce --plan factorial/plan_gce/plan.csv --jar $JAR \
-    --java-opts "-Xms1g -Xmx2g" --out factorial/results_gce.csv --duration 20 --warmup 5             # full; resumes if interrupted
-```
-
-**4. eBPF probes** (on a server VM, while a saturating benchmark runs from the client; repeat for forceSync yes/no and
-pd-balanced/pd-ssd).
-```bash
-sudo ebpf/run_probes.sh 40 /tmp/probe_fsync_on            # 40 s of probing the ZooKeeper JVM
-python3 ebpf/summarize.py fsync_on=/tmp/probe_fsync_on fsync_off=/tmp/probe_fsync_off --tex report/ebpf_summary.tex
-```
-
-**5. Save credits.** `./gce/stop_infra.sh` stops the VMs (no CPU charge), `./gce/start_infra.sh` resumes them,
-`./gce/delete_infra.sh` deletes everything.
+Check, before using the data: every block printed `verify ... OK`; `total_ops_err` is 0; `client_cpu_busy_pct` (factorial)
+and `max client CPU` (USL) stay below ~70 %; with forceSync=no the fsync probe sees (almost) no calls.
 
 ---
 
@@ -288,11 +286,18 @@ read_p{50,95,99}_ms, write_count, write_p{50,95,99}_ms, error_breakdown`. Throug
 **Plan** (`plan.csv`): `order, rep, block, std_run, A..F (±1), <factor name>` — `order` is the execution order.
 
 **Factorial results** (written by `run_plan.py`): the plan columns plus `throughput_ops_sec, overall_p99_ms, read_p50_ms,
-write_p50_ms, write_p99_ms, total_ops_err`.
+write_p50_ms, write_p99_ms, total_ops_err, client_cpu_busy_pct` (the load generator's CPU use during the run, from vmstat).
 
-**USL sweep** (`usl/usl_single.csv`): benchmark rows; `usl/usl_client_cpu.csv`: `clients, rep, client_cpu_busy_pct`.
+**USL sweep** (`usl/usl_single.csv`): benchmark rows; `usl/usl_client_cpu.csv`: `clients, rep, client_cpu_busy_pct`;
+`usl/mntr/<run>_n<N>_r<rep>_<before|after>_<host>_<port>.txt`: `mntr` of every server around every run.
+`usl/stage_breakdown.py` writes `usl/out/stage_breakdown.csv` (per client level) and `stage_breakdown_runs.csv` (per run):
+the leader's mean prep-queue, sync-queue, sync-queue+flush, fsync and until-quorum-ACK times (ms), the group-commit batch
+(requests per fsync) and the server-side write latency pooled over all servers.
 
-**eBPF** (`run_probes.sh` output directory): `fsync_latency.txt`, `biolatency.txt`, `runqlat.txt`, `tcp_retrans.txt`, `meta.txt`.
+**eBPF** (one directory per configuration, e.g. `ebpf_results_gce/fsync_yes_ssd/`): `fsync_latency.txt`, `biolatency.txt`,
+`runqlat.txt`, `tcp_retrans.txt`, `zk_threads.txt`, `thread_names.txt`, `meta.txt` (PID, kernel, log-disk device names),
+`config.txt`, `bench.csv` / `bench_noprobe.csv` (with and without the probes), `mntr_{before,after}_<server>.txt`;
+`summary.json` (all parsed values).
 
 ---
 
@@ -303,9 +308,14 @@ python3 factorial/make_tex.py --meta factorial/plan_gce/design_meta.json --resul
 python3 factorial/analyze.py --results factorial/results_gce.csv --meta factorial/plan_gce/design_meta.json \
     --response throughput_ops_sec --response write_p99_ms --outdir report
 python3 factorial/plots.py --results factorial/results_gce.csv --meta factorial/plan_gce/design_meta.json --outdir report
-cp usl/out/usl_single_fit.png report/
+python3 usl/stage_breakdown.py --mntr usl/mntr --outdir usl/out --tex report/stage_breakdown.tex
+cp usl/out/usl_single_fit.png usl/out/stage_breakdown.png report/
+python3 ebpf/summarize.py fsync_yes_ssd=ebpf_results_gce/fsync_yes_ssd fsync_no_ssd=ebpf_results_gce/fsync_no_ssd \
+    fsync_yes_balanced=ebpf_results_gce/fsync_yes_balanced fsync_no_balanced=ebpf_results_gce/fsync_no_balanced \
+    --tex report/ebpf_summary.tex --json ebpf_results_gce/summary.json      # also ebpf_summary_zk.tex, _threads.tex
 cd report && pdflatex report.tex && pdflatex report.tex
 ```
+`report.tex` needs Springer's `llncs.cls` (Debian/Ubuntu: `texlive-publishers`).
 
 Placeholders that still need a measurement are shown in red (`\todo{...}`) in the PDF; search the source for `TODO`.
 
@@ -318,10 +328,14 @@ Placeholders that still need a measurement are shown in red (`\todo{...}`) in th
 | `python3 factorial/selftest.py` | design + analysis recover planted effects, no false positive on a zero effect | Python |
 | `python3 usl/selftest_usl.py` | the USL fitter detects a real β and refuses one when the truth is β = 0 | Python |
 | `python3 factorial/test_pipeline.py` | design → runner → analysis end to end with a stub benchmark: full plan executed, resume after interruption, planted effects recovered | Python |
+| `python3 usl/test_stage_breakdown.py` | per-run leader deltas of the `mntr` counters, pooled and all-server means, tables | Python |
+| `python3 ebpf/test_summarize.py` | the probe-output parsers on synthetic bpftrace/bcc output: histograms, per-disk selection, thread CPU, overhead, `mntr` deltas | Python |
+| `python3 gce/test_verify.py` | the check that the server-side factors were applied (forceSync flag of the JVM, log directory), against a fake JVM | bash, pgrep, nc |
 | `./demo.sh` | the real stack: Docker servers, Java client, runner | Docker, JDK, Maven |
+| `sudo ./ebpf/local_probe_check.sh` | the five probes on a real (local) ZooKeeper leader under load | root, bpftrace, bcc, Docker |
 
-These tests do not cover Compute Engine, the eBPF tools or ZooKeeper itself; those are exercised by the experiments, and each
-runner verifies its own preconditions (applied server settings, quiet client, client CPU).
+These tests do not cover Compute Engine itself; `gce/vm_jobs.sh smoke` does, and each runner verifies its own
+preconditions (applied server settings, quiet client, client CPU).
 
 ---
 
@@ -336,7 +350,8 @@ runner verifies its own preconditions (applied server settings, quiet client, cl
 | `gcloud: command not found` after installing | Start a new shell or `source ~/.bashrc`. |
 | `Billing account for project ... is not found` | Link the billing account: `gcloud billing projects link <PROJECT_ID> --billing-account=<ID>` (run it as one command). |
 | ssh between the VMs is refused | If the project uses OS Login, project-metadata ssh keys are ignored; switch `gce_backend.py` to `gcloud compute ssh --internal-ip`. |
-| `server configuration was not applied` | The runner verified the JVM flag / log directory and they did not match the plan; check `zk_configure.sh` on the server. |
+| `server configuration was not applied` | The runner verified the JVM flag / log directory on every server and they did not match the plan; check `zk_configure.sh` on the server. (Before 2026-10-20 this check also counted its own ssh shell and always failed; `gce/test_verify.py` guards against that.) |
+| `port is already allocated` when starting local servers | Another program uses 2181-2185 or 18081-18085. Set `ZK_ADMIN_BASE_PORT` (AdminServer ports) or stop the program. |
 | eBPF probe prints nothing | Needs root and kernel headers; `sudo bpftrace -l 'tracepoint:syscalls:sys_enter_fsync'` should list the tracepoint. |
 
 ---
@@ -350,7 +365,10 @@ runner verifies its own preconditions (applied server settings, quiet client, cl
 - `forceSync=no` is not a safe production setting; it is used as an experimental probe.
 - Factors that need a server rebuild (A, D, F) are analysed with the pooled error, which may make their confidence intervals
   somewhat optimistic; the report discusses this.
-- eBPF probes add a small overhead and are therefore run separately from the factorial runs.
+- eBPF probes add some overhead and are therefore run separately from the factorial runs; every probed run is paired
+  with an identical run without probes, so the overhead is measured, not assumed.
+- ZooKeeper's own timers (`mntr`) have a resolution of 1 ms (`fsynctime` is truncated to whole ms); the eBPF fsync probe
+  measures the same calls in microseconds.
 
 ---
 

@@ -9,11 +9,12 @@ for every replicate, so replicate-to-replicate variation includes the
 restart-to-restart variation.
 
 Default: 2^(k-1) with the last factor generated as the product of all others
-(7 factors -> G = ABCDEF, I = ABCDEFG, resolution VII, 64 runs).
+(6 factors -> F = ABCDE, I = ABCDEF, resolution VI, 32 runs per replicate).
 
 Usage:
-  python3 design.py --factors factors_pilot.json --reps 2 --seed 1 --outdir plan_pilot
-  python3 design.py --factors factors_gce.json --generator G=ABCDEF --reps 2 --outdir plan_gce
+  python3 factorial/design.py --factors factorial/factors_gce6.json --reps 2 --seed 1 --outdir factorial/plan_gce
+  python3 factorial/design.py --factors factorial/factors_pilot.json --generator E=ABC --generator F=BCD \
+      --generator G=ACD --reps 2 --outdir plan_pilot        # the 16-run 7-factor pilot (resolution IV)
 """
 import argparse
 import csv

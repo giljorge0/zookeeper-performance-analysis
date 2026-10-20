@@ -1,0 +1,11 @@
+{
+  "name": "local stand-in for the GCE design: the same 2^(6-1) (F = ABCDE, resolution VI) on Docker; factor F is the txn-log device (disk vs tmpfs) instead of pd-balanced vs pd-ssd",
+  "factors": [
+    {"name": "ensemble_size", "param": "ensemble_size", "low": 3, "high": 5, "hard": true, "why": "quorum size: proposals and ACKs per write; the two usual production sizes"},
+    {"name": "write_ratio", "param": "write_ratio", "low": 0.1, "high": 0.5, "why": "share of requests that take the write pipeline (reads stay local)"},
+    {"name": "clients", "param": "clients", "low": 10, "high": 160, "why": "below the saturation knee vs well beyond it"},
+    {"name": "force_sync", "param": "force_sync", "low": "yes", "high": "no", "hard": true, "why": "removes the fsync from the write path: tests the log-sync stage"},
+    {"name": "payload_bytes", "param": "payload_bytes", "low": 128, "high": 4096, "why": "bytes logged, sent to every follower and synced per write"},
+    {"name": "log_device", "param": "log_device", "low": "disk", "high": "tmpfs", "hard": true, "why": "local stand-in for the log-disk factor: txn log on disk vs in RAM"}
+  ]
+}

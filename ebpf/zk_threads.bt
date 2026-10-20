@@ -1,0 +1,24 @@
+#!/usr/bin/env bpftrace
+/*
+ * zk_threads.bt - CPU used by each thread of ONE process (the ZooKeeper JVM), sampled 99 times per second on every CPU.
+ * ZooKeeper runs each stage of its request pipeline in a thread of its own and the JVM gives Linux the thread names
+ * (first 15 characters), so the samples per thread name show which stage is busy:
+ *   ProcessThread(s  PrepRequestProcessor (leader: validates the request, assigns the zxid)
+ *   SyncThread:N     SyncRequestProcessor (appends to the transaction log, fsyncs once per batch)
+ *   CommitProcessor  CommitProcWorkT   commit stage (applies committed requests, replies)
+ *   LearnerHandler-  Sender-...        leader <-> follower replication
+ *   NIOWorkerThread  NIOServerCxnFac   client connections     GC Thread# / G1 ...  garbage collector
+ * samples / (99 * @seconds) = CPU cores used by that thread name. A single-threaded stage close to 1.0 is saturated:
+ * it serializes every write, which is what the contention coefficient alpha of the USL describes.
+ * Usage: sudo bpftrace zk_threads.bt <PID>
+ */
+profile:hz:99
+/pid == $1/
+{
+  @samples[comm] = count();
+}
+
+interval:s:1
+{
+  @seconds = count();
+}
