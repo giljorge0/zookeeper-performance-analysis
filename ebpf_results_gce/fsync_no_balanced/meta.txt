@@ -1,0 +1,3 @@
+pid=8332 duration=45 host=zk3 kernel=6.1.0-53-cloud-amd64
+logdev_balanced=sda logdev_balanced_devt=8388608
+logdev_ssd=sdc logdev_ssd_devt=8388640

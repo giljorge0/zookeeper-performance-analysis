@@ -1,0 +1,23 @@
+Attaching 2 probes...
+
+
+@samples[G1 Service]: 1
+@samples[Service Thread]: 1
+@samples[VM Thread]: 1
+@samples[GC Thread#1]: 1
+@samples[Monitor Deflati]: 1
+@samples[Snapshot Thread]: 2
+@samples[VM Periodic Tas]: 2
+@samples[GC Thread#0]: 2
+@samples[C1 CompilerThre]: 10
+@samples[C2 CompilerThre]: 74
+@samples[RequestThrottle]: 114
+@samples[CommitProcWorkT]: 192
+@samples[SyncThread:3]: 304
+@samples[CommitProcessor]: 500
+@samples[NIOServerCxnFac]: 552
+@samples[NIOWorkerThread]: 643
+@samples[ProcessThread(s]: 735
+@samples[LearnerHandler-]: 785
+@samples[Sender-/10.132.]: 851
+@seconds: 44

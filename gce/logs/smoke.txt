@@ -1,0 +1,24 @@
+    verify 10.132.0.2: forceSync=no in JVM args: 1 (OK), log dir on ssd: OK
+    verify 10.132.0.6: forceSync=no in JVM args: 1 (OK), log dir on ssd: OK
+    verify 10.132.0.7: forceSync=no in JVM args: 1 (OK), log dir on ssd: OK
+HOSTS=10.132.0.2:2181,10.132.0.6:2181,10.132.0.7:2181
+    verify 10.132.0.2: forceSync=no in JVM args: 0 (OK), log dir on balanced: OK
+    verify 10.132.0.6: forceSync=no in JVM args: 0 (OK), log dir on balanced: OK
+    verify 10.132.0.7: forceSync=no in JVM args: 0 (OK), log dir on balanced: OK
+HOSTS=10.132.0.2:2181,10.132.0.6:2181,10.132.0.7:2181
+[setup] creating pool of 200 znodes under /bench/276db02af926
+[run] launching 20 clients, write_ratio=0.3, warmup=3.0s, duration=10.0s
+[done] throughput=17346.7 ops/s  p50=0.619ms p95=3.088ms p99=4.045ms  errors=0
+[cleanup] deleting znode pool
+2026-10-20T19:19:49,276db02af926,,3,20,0.3,10.0,200,128,173467,0,17346.7,0.619,3.088,4.045,121885,0.418,1.582,2.417,51582,2.407,3.747,5.048,{}
+== fsync_yes_ssd: leader 10.132.0.7, 80 clients, write ratio 0.5
+   ops/s without probes: 12637.0   with probes: 19621.167
+   @fsync_calls: 8629
+config                             fsync calls          fsync p50 (us)          fsync p99 (us)   log-disk I/O p99 (us)      run queue p99 (us)               TCP retr.
+fsync_yes_ssd                             8629                    1024                    2048                      --                     511                       0
+
+config                     ops/s  no probes  overhead%  req/fsync  ZK fsync ms  quorum ACK ms  JVM cores  top stages
+fsync_yes_ssd              19621      12637      -55.3        8.8         0.45           2.13       0.89  JIT compiler 0.28, replication to followers 0.19, client connections (I/O) 0.12
+wrote /tmp/ebpf_smoke/summary.json
+wrote /tmp/ebpf_smoke.tex, /tmp/ebpf_smoke_zk.tex, /tmp/ebpf_smoke_threads.tex
+JOB smoke FINISHED rc=0 2026-10-20T19:20:34+00:00

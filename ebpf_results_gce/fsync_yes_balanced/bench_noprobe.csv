@@ -1,0 +1,3 @@
+timestamp,run_id,label,ensemble_size,clients,write_ratio,duration_s,pool_size,payload_bytes,total_ops_ok,total_ops_err,throughput_ops_sec,overall_p50_ms,overall_p95_ms,overall_p99_ms,read_count,read_p50_ms,read_p95_ms,read_p99_ms,write_count,write_p50_ms,write_p95_ms,write_p99_ms,error_breakdown
+2026-10-20T20:22:26,141efe22dc9e,,3,80,0.5,25.0,200,128,696756,0,27870.24,2.993,7.109,8.678,348461,0.483,2.272,5.113,348295,4.672,7.864,9.25,{}
+2026-10-20T20:23:41,1a74da50102d,,3,80,0.5,25.0,200,128,739801,0,29592.04,3.02,6.178,7.553,369914,0.467,3.134,4.353,369887,4.275,6.745,8.225,{}

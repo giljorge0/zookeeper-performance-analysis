@@ -1,0 +1,23 @@
+Attaching 2 probes...
+
+
+@samples[VM Thread]: 1
+@samples[Snapshot Thread]: 1
+@samples[SendWorker:2]: 1
+@samples[GC Thread#1]: 1
+@samples[QuorumPeer[myid]: 1
+@samples[GC Thread#0]: 1
+@samples[Sweeper thread]: 1
+@samples[G1 Service]: 3
+@samples[C1 CompilerThre]: 8
+@samples[RequestThrottle]: 139
+@samples[C2 CompilerThre]: 139
+@samples[CommitProcWorkT]: 181
+@samples[SyncThread:3]: 302
+@samples[NIOServerCxnFac]: 519
+@samples[CommitProcessor]: 570
+@samples[ProcessThread(s]: 596
+@samples[NIOWorkerThread]: 669
+@samples[Sender-/10.132.]: 841
+@samples[LearnerHandler-]: 1157
+@seconds: 44

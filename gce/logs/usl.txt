@@ -1,0 +1,106 @@
+    verify 10.132.0.2: forceSync=no in JVM args: 0 (OK), log dir on ssd: OK
+    verify 10.132.0.6: forceSync=no in JVM args: 0 (OK), log dir on ssd: OK
+    verify 10.132.0.7: forceSync=no in JVM args: 0 (OK), log dir on ssd: OK
+HOSTS=10.132.0.2:2181,10.132.0.6:2181,10.132.0.7:2181
+39 runs, random order, ~30 min
+[1/39] N=96   rep=1  throughput=38478.1 ops/s  client CPU 23%  (stdout lines: 4)
+[2/39] N=64   rep=1  throughput=37476.333 ops/s  client CPU 21%  (stdout lines: 4)
+[3/39] N=32   rep=3  throughput=30505.933 ops/s  client CPU 17%  (stdout lines: 4)
+[4/39] N=24   rep=3  throughput=26492.133 ops/s  client CPU 15%  (stdout lines: 4)
+[5/39] N=24   rep=2  throughput=27675.967 ops/s  client CPU 15%  (stdout lines: 4)
+[6/39] N=1    rep=2  throughput=2293.833 ops/s  client CPU 1%  (stdout lines: 4)
+[7/39] N=2    rep=1  throughput=4419.1 ops/s  client CPU 2%  (stdout lines: 4)
+[8/39] N=128  rep=3  throughput=45006.433 ops/s  client CPU 26%  (stdout lines: 4)
+[9/39] N=48   rep=2  throughput=36326.7 ops/s  client CPU 21%  (stdout lines: 4)
+[10/39] N=48   rep=3  throughput=34774.367 ops/s  client CPU 20%  (stdout lines: 4)
+[11/39] N=4    rep=2  throughput=7580.2 ops/s  client CPU 5%  (stdout lines: 4)
+[12/39] N=160  rep=3  throughput=46252.6 ops/s  client CPU 27%  (stdout lines: 4)
+[13/39] N=160  rep=1  throughput=46266.067 ops/s  client CPU 28%  (stdout lines: 4)
+[14/39] N=64   rep=2  throughput=38861.667 ops/s  client CPU 22%  (stdout lines: 4)
+[15/39] N=1    rep=3  throughput=1875.667 ops/s  client CPU 1%  (stdout lines: 4)
+[16/39] N=32   rep=1  throughput=30651.667 ops/s  client CPU 17%  (stdout lines: 4)
+[17/39] N=24   rep=1  throughput=27702.067 ops/s  client CPU 16%  (stdout lines: 4)
+[18/39] N=48   rep=1  throughput=36419.4 ops/s  client CPU 20%  (stdout lines: 4)
+[19/39] N=2    rep=3  throughput=3868.133 ops/s  client CPU 2%  (stdout lines: 4)
+[20/39] N=12   rep=2  throughput=17381.967 ops/s  client CPU 10%  (stdout lines: 4)
+[21/39] N=8    rep=1  throughput=13011.167 ops/s  client CPU 9%  (stdout lines: 4)
+[22/39] N=12   rep=1  throughput=17624.667 ops/s  client CPU 10%  (stdout lines: 4)
+[23/39] N=1    rep=1  throughput=2325.433 ops/s  client CPU 1%  (stdout lines: 4)
+[24/39] N=96   rep=3  throughput=41870.767 ops/s  client CPU 24%  (stdout lines: 4)
+[25/39] N=128  rep=1  throughput=46202.167 ops/s  client CPU 27%  (stdout lines: 4)
+[26/39] N=12   rep=3  throughput=17575.567 ops/s  client CPU 11%  (stdout lines: 4)
+[27/39] N=16   rep=2  throughput=21281.5 ops/s  client CPU 12%  (stdout lines: 4)
+[28/39] N=128  rep=2  throughput=45621.767 ops/s  client CPU 25%  (stdout lines: 4)
+[29/39] N=96   rep=2  throughput=43123.6 ops/s  client CPU 25%  (stdout lines: 4)
+[30/39] N=32   rep=2  throughput=30538.2 ops/s  client CPU 17%  (stdout lines: 4)
+[31/39] N=2    rep=2  throughput=3686.767 ops/s  client CPU 2%  (stdout lines: 4)
+[32/39] N=16   rep=3  throughput=20792.967 ops/s  client CPU 11%  (stdout lines: 4)
+[33/39] N=8    rep=3  throughput=13089.033 ops/s  client CPU 8%  (stdout lines: 4)
+[34/39] N=160  rep=2  throughput=46787.933 ops/s  client CPU 28%  (stdout lines: 4)
+[35/39] N=8    rep=2  throughput=13235.367 ops/s  client CPU 9%  (stdout lines: 4)
+[36/39] N=64   rep=3  throughput=38978.267 ops/s  client CPU 22%  (stdout lines: 4)
+[37/39] N=4    rep=1  throughput=7413.8 ops/s  client CPU 5%  (stdout lines: 4)
+[38/39] N=4    rep=3  throughput=7188.167 ops/s  client CPU 5%  (stdout lines: 4)
+[39/39] N=16   rep=1  throughput=20817.233 ops/s  client CPU 12%  (stdout lines: 4)
+done -> usl/usl_single.csv, usl/usl_client_cpu.csv, usl/mntr/
+fit: python3 usl/usl_single_fit.py --input usl/usl_single.csv --ensemble-size 3 --write-ratio 0.3 --outdir usl/out
+stages: python3 usl/stage_breakdown.py --mntr usl/mntr --outdir usl/out --tex report/stage_breakdown.tex
+max client CPU: 160,2,28   (investigate if above ~70)
+data: 39 observations, 13 N levels, replicates per level 3-3
+
+=== USL fit (relative-error weighted) ===
+gamma =   2082.3   95% CI [1995.9, 2169.1]
+alpha =   0.0385   95% CI [0.0345, 0.0414]
+beta  = 4.37e-06   95% CI [7.67e-27, 1.97e-05]   (bootstrap fits with beta~0: 37%)
+N_max =    469.2   95% CI [215.2, 1603.3]
+X_max =    48942   95% CI [45955, 53653]
+R^2 = 0.9968   mean abs. relative error = 2.8%
+
+=== Is beta justified? (USL vs Amdahl) ===
+Amdahl: gamma=2087.5 alpha=0.0390   AIC USL -239.5 vs Amdahl -241.4   F-test p = 0.7151
+verdict: beta NOT supported: report the contention-only (Amdahl) model
+
+=== Linearization check (y/(N-1) = alpha + beta N) ===
+alpha=0.0530  beta=-1.16e-04   (compare with NLS above)
+
+=== Hold-out: fit on N <= 64, predict the rest ===
+N=   96  observed    41157  predicted    41950  error  +1.9%
+N=  128  observed    45610  predicted    43426  error  -4.8%
+N=  160  observed    46436  predicted    44049  error  -5.1%
+hold-out mean abs. error: 4.0%
+
+=== Coverage checks ===
+WARNING: predicted N_max 469 is beyond the largest tested N (160): extrapolation
+WARNING: fewer than 2 N levels beyond the predicted peak: beta is weakly constrained
+
+wrote usl/out/usl_single_fit.json|.tex|.png
+wrote report/usl_text.tex
+We fitted the USL to 39 measurements of a single configuration (3 servers, write ratio 0.3): 13 client counts from 1 to 160, at least 3 replicates each, run in random order. The fit is weighted by relative error and the intervals are 95\% bootstrap intervals over the replicates.
+
+The ideal single-client throughput is $\gamma=2082$ ops/s (CI 1996--2169) and the contention coefficient is $\alpha=0.038$ (CI 0.035--0.041), so the contention term alone limits the speedup over one client to $1/\alpha\approx26.0$ and caps throughput at about $\gamma/\alpha\approx54154$ ops/s.
+
+A coherency term is \emph{not} supported: the contention-only (Amdahl) model fits as well (AIC -241.4 against -239.5 for the full USL; F-test $p=0.72$), so we do not claim retrograde scaling and report $\alpha$ only. The best measured throughput is 46436 ops/s at 160 clients, and the curve still rises at the largest load.
+
+As a validation, a fit using only $N\le64$ predicts the held-out higher loads with a mean absolute error of 4.0\%.
+
+\textbf{[TODO: resolve before submission: predicted N\_max 469 is beyond the largest tested N (160): extrapolation; fewer than 2 N levels beyond the predicted peak: beta is weakly constrained]}
+
+\textbf{[TODO: interpretation. Relate $\alpha$ to the pipeline stage identified by the eBPF probes and the factorial effects (Sections~\ref{sec:design} and~\ref{sec:ebpf}); say which stage is serialized.]}
+39 runs, 13 client levels (leader means per run, then averaged per level)
+    N   prep queue (zxid)          sync queue  sync queue + flush               fsync    until quorum ACK  server-side write    req/fsync
+    1                0.02                0.03                0.55                0.06                0.72                0.87         1.0
+    2                0.02                0.12                0.62                0.06                0.74                0.96         1.0
+    4                0.02                0.21                0.70                0.08                0.86                1.04         1.4
+    8                0.03                0.33                0.90                0.13                1.03                1.23         2.4
+   12                0.03                0.37                0.98                0.18                1.16                1.40         3.2
+   16                0.05                0.43                1.08                0.22                1.34                1.61         4.1
+   24                0.09                0.48                1.19                0.32                1.45                1.81         6.0
+   32                0.13                0.54                1.40                0.42                1.68                2.15         7.8
+   48                0.31                0.59                1.63                0.57                1.98                2.75        10.6
+   64                0.35                0.66                1.86                0.69                2.26                3.26        13.0
+   96                0.95                0.69                1.95                0.69                2.39                4.19        14.0
+  128                1.13                0.75                2.13                0.77                2.69                5.01        17.4
+  160                1.37                0.76                2.14                0.75                2.79                5.57        17.6
+wrote usl/out/stage_breakdown.csv, stage_breakdown_runs.csv, stage_breakdown.png, report/stage_breakdown.tex
+stopped
+JOB usl FINISHED rc=0 2026-10-20T20:17:19+00:00

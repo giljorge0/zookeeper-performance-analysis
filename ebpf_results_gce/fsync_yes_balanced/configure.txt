@@ -1,0 +1,4 @@
+    verify 10.132.0.2: forceSync=no in JVM args: 0 (OK), log dir on balanced: OK
+    verify 10.132.0.6: forceSync=no in JVM args: 0 (OK), log dir on balanced: OK
+    verify 10.132.0.7: forceSync=no in JVM args: 0 (OK), log dir on balanced: OK
+HOSTS=10.132.0.2:2181,10.132.0.6:2181,10.132.0.7:2181

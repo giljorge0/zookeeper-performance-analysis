@@ -1,0 +1,1 @@
+config=yes:balanced force_sync=yes log_disk=balanced ensemble=3 clients=80 write_ratio=0.5 leader=10.132.0.7 probe_s=45 duration=25 warmup=3
