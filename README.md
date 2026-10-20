@@ -210,8 +210,11 @@ exercises the whole pipeline, but on one machine the servers, the client and any
 Commands marked *(laptop)* run on your machine; the jobs run on the **client VM** (`zkclient`), inside tmux.
 
 ```bash
-# (laptop) one-time: gcloud auth login; gcloud config set project <PROJECT_ID>; billing enabled; ~18 vCPUs of quota
-./gce/create_infra.sh                            # (laptop) zkclient + zk1..zk5 with 2 log disks each, gce/cluster.env (~10 min)
+# (laptop) one-time: gcloud auth login; gcloud config set project <PROJECT_ID>; billing enabled; 18 vCPUs of quota
+# (new projects often allow only 12 vCPUs in total: request CPUS-ALL-REGIONS-per-project = 24, usually granted at once)
+BOOT_DISK_TYPE=pd-standard MAX_RUN_DURATION=5h ./gce/create_infra.sh   # (laptop) zkclient + zk1..zk5, gce/cluster.env (~10 min)
+# BOOT_DISK_TYPE=pd-standard keeps the SSD quota at 200 GB (only the log disks are SSD); every VM stops itself after
+# MAX_RUN_DURATION of running (default 6h), so a forgotten VM cannot keep spending credits.
 tar --exclude=.git --exclude=java-benchmark/target -czf /tmp/repo.tgz -C .. <repository>   # (laptop) includes cluster.env
 gcloud compute scp /tmp/repo.tgz ~/.ssh/google_compute_engine zkclient:~ --zone europe-west1-b  # (laptop)
 gcloud compute ssh zkclient --zone europe-west1-b                                              # (laptop)

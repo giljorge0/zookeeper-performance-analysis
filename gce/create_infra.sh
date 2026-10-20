@@ -5,12 +5,19 @@
 # WITH_Z3=1 also creates zkm1..zkm5 spread over three zones (group z3). Only a zone-placement factor
 # needs them, and the 6-factor design does not use one, so the default is 6 VMs instead of 11.
 # Override sizes if your CPU quota is small:  SERVER_TYPE=e2-standard-2 CLIENT_TYPE=e2-standard-4 ./create_infra.sh
+# BOOT_DISK_TYPE=pd-standard keeps the boot disks off the SSD quota (only the log disks are pd-balanced/pd-ssd);
+# with it, 5 servers use 200 GB of SSD quota instead of 350 GB.
+# Every VM STOPS itself after MAX_RUN_DURATION of running (default 6h; the clock restarts when it is started
+# again), so a forgotten VM cannot keep spending credits. MAX_RUN_DURATION= (empty) disables it.
 set -uo pipefail
 cd "$(dirname "$0")"
 command -v gcloud >/dev/null || { echo "gcloud is not installed"; exit 1; }
 [ -n "$(gcloud config get-value project 2>/dev/null)" ] || { echo "no project set: run gcloud config set project YOUR_PROJECT_ID"; exit 1; }
 REGION="${REGION:-europe-west1}"; ZA="$REGION-b"; ZB="$REGION-c"; ZC="$REGION-d"
 SERVER_TYPE="${SERVER_TYPE:-n2-standard-2}"; CLIENT_TYPE="${CLIENT_TYPE:-n2-standard-8}"
+BOOT_DISK_TYPE="${BOOT_DISK_TYPE:-pd-balanced}"
+MAX_RUN_DURATION="${MAX_RUN_DURATION-6h}"
+LIMIT=(); [ -n "$MAX_RUN_DURATION" ] && LIMIT=(--max-run-duration="$MAX_RUN_DURATION" --instance-termination-action=STOP)
 IMG=(--image-family=debian-12 --image-project=debian-cloud)
 
 gcloud services enable compute.googleapis.com >/dev/null
@@ -18,15 +25,15 @@ gcloud compute firewall-rules create zk-internal --network=default --allow=tcp,u
    --source-ranges=10.128.0.0/9 >/dev/null 2>&1 || true
 
 mk_server() {  # name zone
-  gcloud compute instances create "$1" --zone="$2" --machine-type="$SERVER_TYPE" "${IMG[@]}" \
-    --boot-disk-size=20GB --boot-disk-type=pd-balanced \
+  gcloud compute instances create "$1" --zone="$2" --machine-type="$SERVER_TYPE" "${IMG[@]}" "${LIMIT[@]}" \
+    --boot-disk-size=20GB --boot-disk-type="$BOOT_DISK_TYPE" \
     --create-disk="name=$1-logbal,size=20GB,type=pd-balanced,device-name=zk-log-balanced,auto-delete=yes" \
     --create-disk="name=$1-logssd,size=20GB,type=pd-ssd,device-name=zk-log-ssd,auto-delete=yes" \
     --metadata-from-file=startup-script=server_startup.sh >/dev/null
 }
 echo "creating VMs (a few minutes)..."
-gcloud compute instances create zkclient --zone="$ZA" --machine-type="$CLIENT_TYPE" "${IMG[@]}" \
-  --boot-disk-size=50GB --boot-disk-type=pd-balanced --metadata-from-file=startup-script=client_startup.sh >/dev/null &
+gcloud compute instances create zkclient --zone="$ZA" --machine-type="$CLIENT_TYPE" "${IMG[@]}" "${LIMIT[@]}" \
+  --boot-disk-size=50GB --boot-disk-type="$BOOT_DISK_TYPE" --metadata-from-file=startup-script=client_startup.sh >/dev/null &
 for i in 1 2 3 4 5; do mk_server "zk$i" "$ZA" & done
 Z3=("$ZA" "$ZB" "$ZC" "$ZA" "$ZB")
 if [ "${WITH_Z3:-0}" = "1" ]; then
