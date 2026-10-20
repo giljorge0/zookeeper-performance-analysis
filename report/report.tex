@@ -165,9 +165,11 @@ numbers are in Section~\ref{sec:chaos}.
 \label{sec:method}
 
 \paragraph{Deployment.}
-All experiments of Stage II run on Google Compute Engine in one zone (\todo{confirm: europe-west1-b}). The load generator
-runs on its own virtual machine (\todo{confirm: n2-standard-8}) and the ZooKeeper servers each on a separate machine
-(\todo{confirm: n2-standard-2}), so that client and servers do not compete for CPU, which was a limitation of Stage I.
+% src: gce/testbed_facts.txt, gcloud compute instances/disks list
+All experiments of Stage II run on Google Compute Engine in one zone (europe-west1-b). The load generator
+runs on its own virtual machine (n2-standard-8: 8 vCPUs, 32\,GB) and the ZooKeeper servers each on a separate machine
+(n2-standard-2: 2 vCPUs, 8\,GB), so that client and servers do not compete for CPU, which was a limitation of Stage I.
+All machines run Debian~12 (kernel 6.1) and OpenJDK~17, with boot disks of type pd-standard.
 ZooKeeper 3.9.3 runs natively (not in a container) with a 1\,GB heap, \texttt{tickTime}=2000\,ms and no client-connection
 limit. Each server has two extra disks, pd-balanced and pd-ssd, and the transaction log (\texttt{dataLogDir}) is placed on
 one of them according to the factor \emph{log disk}; snapshots stay on the boot disk. Before each block of runs the
@@ -237,7 +239,7 @@ chosen among them; the others are fixed and reported so that the experiment can 
     \textbf{\texttt{forceSync}} (fsync of the transaction log) & yes, no & D \\
     \textbf{Log disk} (device of \texttt{dataLogDir}) & pd-balanced, pd-ssd (20\,GB each) & F \\
     Observers (non-voting servers) & 0 & fixed \\
-    Snapshot device (\texttt{dataDir}) & boot disk (pd-balanced) & fixed \\
+    Snapshot device (\texttt{dataDir}) & boot disk (pd-standard) & fixed \\
     \texttt{snapCount}, \texttt{preAllocSize} & 100{,}000, 64\,MB (defaults) & fixed \\
     Log batching (\texttt{maxBatchSize}, \texttt{flushDelay}) & 1000, 0 (defaults: flush when the queue is empty) & fixed \\
     \texttt{globalOutstandingLimit}, \texttt{maxClientCnxns} & 1000 (default), no limit & fixed \\
