@@ -345,7 +345,7 @@ run $i$ and $n=32$ the number of runs. The effects, the allocation of variation 
 \end{equation}
 The share of the variation explained by effect $j$ is $100\,SS_j/SST$. With 31 effects tested at the 95\% level about two
 false positives are expected, so effects are ranked by their share of the variation and not only by significance. We check the
-residuals against the predicted value and on a normal quantile plot; if the ratio between the largest and the smallest response
+residuals against the predicted value and on a normal quantile plot (Fig.~\ref{fig:residuals} in the appendix); if the ratio between the largest and the smallest response
 exceeds 10, the analysis is repeated on $\log_{10}$ of the response (a multiplicative model). The analysis code was validated on
 synthetic data with known effects before it was applied to measurements.
 
@@ -377,11 +377,13 @@ Fig.~\ref{fig:pareto} are filled in by \texttt{analyze.py} and \texttt{plots.py}
 
 \begin{table}[t]
   \centering
-  \caption{Largest effects on throughput (ops/s): $q$ is half the change from the low to the high level, with 95\% confidence
-    intervals.}
+  \caption{Largest effects on throughput and on the 99th-percentile write latency: $q$ is half the change from the low to
+    the high level, with its 95\% confidence interval and the share of the variation it explains (\%). For a response
+    analysed on $\log_{10}$, $q$ is in $\log_{10}$ units and ($\times$) is the factor by which the response changes from the
+    low to the high level. $^\dagger$: the interval includes zero.}
   \label{tab:effects}
   \footnotesize
-  \IfFileExists{effects_throughput_ops_sec.tex}{\input{effects_throughput_ops_sec.tex}}{\todo{run factorial/analyze.py --outdir report}}
+  \IfFileExists{effects_combined.tex}{\input{effects_combined.tex}}{\todo{run report/make\_artifacts.sh}}
 \end{table}
 
 \begin{figure}[t]
@@ -527,8 +529,7 @@ With a continuous benchmark running against a 3-server ensemble we identified th
 its container. The two survivors kept a majority and continued serving, and ZooKeeper logged the re-election:
 \texttt{FOLLOWING - LEADER ELECTION TOOK - 211 MS} in the first run, and 216\,ms (follower) and 235\,ms (new leader) in a repetition. This is
 ZooKeeper's own measurement of the election phase, not the outage seen by a client, which also waits for its retry and reconnect
-logic and which we did not instrument. \todo{optional: repeat on Compute Engine and measure the client-observed gap between the last
-successful operation before the kill and the first one after it.}
+logic and which we did not instrument.
 
 \subsection{Network delay}
 \label{sec:chaos}
@@ -611,8 +612,12 @@ Two methodological lessons are already clear. First, a load generator must be va
 logged every operation produced a contention coefficient that looked like a property of ZooKeeper and was not, and the check that exposed it was
 counting the lines of output of the client. Second, on shared hardware a single run per point cannot separate an effect from drift (identical runs
 differed by up to a factor of two), so every conclusion in this report rests on replicated, randomized runs on dedicated machines.
-\todo{limitations: one zone; virtual machines on shared hosts; hard-to-change factors analysed with the pooled error; the sweep and the factorial cover one
-write ratio and payload each unless stated.}
+\emph{Limitations.} All servers are in one zone, so the round trips of the quorum are those of one data centre and
+not of a geo-replicated deployment; the virtual machines share their hosts with other tenants, which replicates and
+randomization average out but do not remove; the hard-to-change factors (A, D, F) are tested against the pooled error
+rather than a whole-plot error; 20\,GB persistent disks on two-vCPU machines tie the disk results to this testbed; the
+USL curve covers one configuration (three servers, 30\% writes, 128-byte payloads); and the workload has no creates,
+deletes, watches or multi-operations. Natural next steps are observers, asynchronous clients and a multi-zone placement.
 
 \appendix
 \section{Sign table}
@@ -633,6 +638,18 @@ write ratio and payload each unless stated.}
     every load level of the USL curve: leader means per run, averaged over the replicates (the server-side write latency is
     pooled over all servers).}
   \label{fig:stages}
+\end{figure}
+
+\section{Model checks}
+\label{app:residuals}
+\begin{figure}[h]
+  \centering
+  \IfFileExists{residuals_throughput_ops_sec.png}{\includegraphics[width=0.9\textwidth]{residuals_throughput_ops_sec.png}}{\todo{run report/make\_artifacts.sh}}\\
+  \IfFileExists{residuals_write_p99_ms.png}{\includegraphics[width=0.9\textwidth]{residuals_write_p99_ms.png}}{}
+  \caption{Residuals of the effects model of the factorial experiment against the predicted value (left) and on a normal
+    quantile plot (right): throughput (top) and 99th-percentile write latency (bottom), in the model used in
+    Table~\ref{tab:effects}.}
+  \label{fig:residuals}
 \end{figure}
 
 \begin{thebibliography}{12}

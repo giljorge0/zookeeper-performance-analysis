@@ -96,6 +96,7 @@ factorial/                     2^(6-1) fractional factorial experiment
   run_plan.py                    executes a plan (docker backend locally, gce backend on the client VM); records client CPU
   analyze.py                     effects, allocation of variation, confidence intervals, residual checks
   plots.py, make_tex.py          main-effect/interaction plots and LaTeX tables
+  effects_tex.py                 the largest effects on throughput and write p99 in one table
   selftest.py, test_pipeline.py  validation without any servers
 gce/                           Google Compute Engine
   create_infra.sh                creates the client VM and 5 server VMs (+ 2 log disks each), writes cluster.env
@@ -119,6 +120,7 @@ ebpf/                          five probes
 ── Report ───────────────────────────────────────────────────────────────────────────────────────────
 report/report.tex              the Stage II report (LNCS); generated tables and figures are read from report/
 report/stage1_report.tex       the Stage I report, as it was at the Stage I commit (7640029)
+report/make_artifacts.sh       regenerates every table and figure of the report from the raw results
 ```
 
 Result files (`results_java*.csv`, `chaos_results_java.csv`, `ycsb_results/`, `usl_plots_*`): the `*_noisy.csv` files were
@@ -308,6 +310,15 @@ the leader's mean prep-queue, sync-queue, sync-queue+flush, fsync and until-quor
 ---
 
 ## Producing the report artifacts
+
+All at once (`LOG10_*=1` selects the log10 model for that response in the report tables):
+
+```bash
+LOG10_THROUGHPUT=1 LOG10_P99=1 ./report/make_artifacts.sh
+cd report && pdflatex report.tex && pdflatex report.tex
+```
+
+Or step by step:
 
 ```bash
 python3 factorial/make_tex.py --meta factorial/plan_gce/design_meta.json --results factorial/results_gce.csv --outdir report
