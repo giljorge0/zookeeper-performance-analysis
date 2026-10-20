@@ -1,12 +1,12 @@
-\begin{tabular}{@{}cllllp{4.6cm}@{}}
+\begin{tabularx}{\linewidth}{@{}cllll>{\raggedright\arraybackslash}X@{}}
 \toprule
 & Factor & $-1$ & $+1$ & Hard & Why \\
 \midrule
-A & ensemble\_size & 3 & 5 & yes & quorum size: proposals and ACKs per write; the two usual production sizes \\
-B & write\_ratio & 0.1 & 0.5 &  & share of requests that take the write pipeline (reads stay local) \\
+A & ensemble size & 3 & 5 & yes & quorum size: proposals and ACKs per write; the two usual production sizes \\
+B & write ratio & 0.1 & 0.5 &  & share of requests that take the write pipeline (reads stay local) \\
 C & clients & 10 & 160 &  & below the saturation knee vs well beyond it \\
-D & force\_sync & yes & no & yes & removes the fsync from the write path: tests the log-sync stage \\
-E & payload\_bytes & 128 & 4096 &  & bytes logged, sent to every follower and synced per write \\
-F & log\_disk & pd-balanced & pd-ssd & yes & speed of the device under the fsync (dedicated log disk) \\
+D & force sync & yes & no & yes & removes the fsync from the write path: tests the log-sync stage \\
+E & payload bytes & 128 & 4096 &  & bytes logged, sent to every follower and synced per write \\
+F & log disk & pd-balanced & pd-ssd & yes & speed of the device under the fsync (dedicated log disk) \\
 \bottomrule
-\end{tabular}
+\end{tabularx}

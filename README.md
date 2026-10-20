@@ -39,11 +39,12 @@ Established with the data in this repository:
 
 - **The Stage I load generator was throttled by its own logging.** The shaded jar contained Logback with its default DEBUG
   configuration, so the client printed about one line per operation (~145,000 lines per 15 s run) and its threads queued on
-  the output. The same point (3 servers, 20 clients) gave ~6.4k ops/s in the sweep and 16k–34k ops/s with a quiet client.
-  This invalidates the Stage I claim that the contention coefficient was the same for every ensemble size
-  (`diagnose_gap.sh`, `gap_diagnosis.csv`).
-- **Run-to-run variation on a laptop is about ±20 %** for identical runs (18k–24k ops/s), which is why Stage II uses dedicated
-  VMs, replicates and randomized run order.
+  the output. The same point (3 servers, 20 clients) gave 6.4k ops/s in the Stage I sweep and 14.8k ops/s when the sweep
+  was repeated with a quiet client (`results_java_noisy.csv`, `results_java_v2.csv`). This invalidates the Stage I claim
+  that the contention coefficient was the same for every ensemble size (`diagnose_gap.sh`, `gap_diagnosis.csv`).
+- **Run-to-run variation on a laptop is large:** repetitions of an identical configuration differed by up to a factor of
+  two (6.3k against 12.0k ops/s in `gap_diagnosis.csv`), which is why Stage II uses dedicated VMs, replicates and
+  randomized run order.
 - **Network delay:** a 20 ms egress delay reduces single-client throughput by 116× (not 27×; the old figure used the wrong
   baseline), but only 9.5× at 80 clients, because clients overlap their waiting. Median read latency under delay is 22.7 ms (one
   delayed hop), median write latency 106 ms (about five hops), which matches the write pipeline.

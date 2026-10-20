@@ -31,22 +31,33 @@ def main():
     F = meta["factors"]
     os.makedirs(a.outdir, exist_ok=True)
 
+    # needs \usepackage{tabularx} in the report; the justification column takes the rest of the line
     with open(os.path.join(a.outdir, "design_factors.tex"), "w") as fh:
-        fh.write("\\begin{tabular}{@{}cllllp{4.6cm}@{}}\n\\toprule\n"
+        fh.write("\\begin{tabularx}{\\linewidth}{@{}cllll>{\\raggedright\\arraybackslash}X@{}}\n\\toprule\n"
                  "& Factor & $-1$ & $+1$ & Hard & Why \\\\\n\\midrule\n")
         for f in F:
-            fh.write(f"{f['letter']} & {tex(f['name'])} & {tex(f['low'])} & {tex(f['high'])} & "
+            fh.write(f"{f['letter']} & {tex(f['name'].replace('_', ' '))} & {tex(f['low'])} & {tex(f['high'])} & "
                      f"{'yes' if f.get('hard') else ''} & {tex(f.get('why', ''))} \\\\\n")
-        fh.write("\\bottomrule\n\\end{tabular}\n")
+        fh.write("\\bottomrule\n\\end{tabularx}\n")
 
-    classes = meta["alias_classes"]
+    # main effects and two-factor interactions with their aliases, three (effect, aliases) pairs per row
+    classes = [c for c in meta["alias_classes"] if c["order"] <= 2]
+    per_row = 3
+    rows = -(-len(classes) // per_row)
     with open(os.path.join(a.outdir, "design_alias.tex"), "w") as fh:
         fh.write("% " + "I = " + " = ".join(meta["defining_relation"][1:]) + f", resolution {meta['resolution']}\n")
-        fh.write("\\begin{tabular}{@{}ll@{}}\n\\toprule\nEffect & Aliased with \\\\\n\\midrule\n")
-        for c in classes:
-            if c["order"] <= 2:
-                al = ", ".join(c["aliases"][:3]) or "--"
-                fh.write(f"{c['effect']} & {al} \\\\\n")
+        fh.write("\\begin{tabular}{@{}" + "ll" * per_row + "@{}}\n\\toprule\n"
+                 + " & ".join(["Effect & Aliased with"] * per_row) + " \\\\\n\\midrule\n")
+        for i in range(rows):
+            cells = []
+            for j in range(per_row):
+                k = j * rows + i                      # fill column by column, so main effects come first
+                if k < len(classes):
+                    c = classes[k]
+                    cells += [c["effect"], ", ".join(c["aliases"][:3]) or "--"]
+                else:
+                    cells += ["", ""]
+            fh.write(" & ".join(cells) + " \\\\\n")
         fh.write("\\bottomrule\n\\end{tabular}\n")
 
     letters = [f["letter"] for f in F]

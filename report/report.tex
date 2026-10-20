@@ -4,6 +4,7 @@
 \usepackage{graphicx}
 \usepackage{url}
 \usepackage{booktabs}
+\usepackage{tabularx}
 \usepackage{xcolor}
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta,positioning}
@@ -11,6 +12,13 @@
 \usepackage[a4paper, margin=2.3cm]{geometry}
 \providecommand{\email}[1]{\texttt{#1}}
 \graphicspath{{.}{figures/}}
+% Let tall tables and figures sit at the top of a page or on a page of floats instead of piling up at the end.
+\renewcommand{\topfraction}{0.9}
+\renewcommand{\bottomfraction}{0.6}
+\renewcommand{\textfraction}{0.1}
+\renewcommand{\floatpagefraction}{0.75}
+\setcounter{topnumber}{3}
+\setcounter{totalnumber}{4}
 
 % Everything that still needs a measurement or a decision is marked with \todo (red). Search for TODO before submitting.
 \newcommand{\todo}[1]{\textbf{\textcolor{red}{[TODO: #1]}}}
@@ -34,8 +42,9 @@ evaluation on Google Compute Engine, with the servers and the load generator on 
 (i) run a $2^{6-1}$ fractional factorial experiment over six factors (ensemble size, write ratio, number of clients,
 \texttt{forceSync}, payload size and log disk) with two replicates and a randomized, blocked run order;
 (ii) fit one Universal Scalability Law curve, with replicates, bootstrap confidence intervals and a test of whether
-the coherency term is justified; and (iii) observe the servers with four eBPF probes (fsync latency, block-I/O
-latency, run-queue latency, TCP retransmissions). We also correct two conclusions of our Stage I report: the
+the coherency term is justified; and (iii) follow a write through the pipeline with ZooKeeper's own per-stage counters
+and five eBPF probes (fsync latency, block-I/O latency, run-queue latency, TCP retransmissions and the CPU used by each
+pipeline thread). We also correct two conclusions of our Stage I report: the
 Stage I load generator logged every operation, which throttled it and made the contention coefficient look
 independent of the number of servers, and the reported effect of network delay compared against the wrong
 baseline. \todo{one or two sentences with the main findings: which factors and interactions explain most of the
@@ -61,10 +70,10 @@ evaluation. Our contributions are:
     (Section~\ref{sec:corrections}) and show how large run-to-run variation is on shared hardware;
   \item a $2^{6-1}$ fractional factorial experiment on Google Compute Engine that ranks the factors and
     interactions that drive throughput and write tail latency (Sections~\ref{sec:design} and~\ref{sec:factorial});
-  \item a single, well-supported USL fit whose coefficients are tied to stages of the pipeline
-    (Section~\ref{sec:usl});
-  \item four eBPF probes that observe the log-sync stage, the disk, the scheduler and the network from inside the
-    kernel (Section~\ref{sec:ebpf}).
+  \item a single, well-supported USL fit, with the time a write spends in each pipeline stage measured at every load
+    level, so that the coefficients can be tied to stages of the pipeline (Section~\ref{sec:usl});
+  \item five eBPF probes, three of them our own, that observe the log-sync stage, the disk, the scheduler, the network
+    and the CPU of each pipeline thread from inside the kernel (Section~\ref{sec:ebpf}).
 \end{itemize}
 
 \section{System Description}
@@ -124,11 +133,13 @@ Before the Stage II experiments we re-examined the Stage I data and found three 
 change two conclusions of the Stage I report and because they shaped the design of Stage II.
 
 \paragraph{The load generator logged every operation.}
-The same configuration (3 servers, 20 clients, 30\% writes) reached about 6{,}400 ops/s in the Stage I sweep but
-16{,}000--18{,}000 ops/s in a short demo run. A controlled comparison showed that the jar used for the sweep printed
-about 145{,}000 lines in a 15\,s run, roughly one per operation: the shaded jar contained Logback, whose default
-configuration logs the ZooKeeper client at DEBUG level, so all client threads queued on the console. Writing the
-output to a file raised throughput to 8{,}000--10{,}000 ops/s and a quiet client reached 16{,}000--34{,}000 ops/s.
+% src: results_java_noisy.csv, results_java_v2.csv, gap_diagnosis.csv
+The same configuration (3 servers, 20 clients, 30\% writes) reached 6{,}364 ops/s in the Stage I sweep but
+14{,}832 ops/s when the sweep was repeated with a quiet client. A controlled comparison showed that the jar used for the
+sweep printed about 145{,}000 lines in a 15\,s run, roughly one per operation: the shaded jar contained Logback, whose
+default configuration logs the ZooKeeper client at DEBUG level, so all client threads queued on the output. With the
+output redirected to a file, 15 interleaved runs of five variants gave 6{,}300--12{,}000 ops/s, and neither the JVM heap
+flags nor the metrics collector made a consistent difference.
 The fix is a one-line Logback configuration that turns logging off, and the experiment runner now aborts a run
 if the client prints more than a few lines.
 This invalidates the Stage I interpretation of $\alpha$. The Stage I fits gave the same $\alpha\approx0.23$ for 1, 3 and 5
@@ -139,8 +150,9 @@ servers, and the standalone server no longer saturated within 80 clients (29{,}0
 claim and re-measure $\alpha$ in Section~\ref{sec:usl}.
 
 \paragraph{Run-to-run variation on a laptop is large.}
-Nine runs of the identical configuration (3 servers, 20 clients) gave between 18{,}000 and 24{,}000 ops/s, with a
-downward drift over the sequence; neither the JVM heap flags nor the metrics collector changed the result. The Stage I
+% src: gap_diagnosis.csv
+In the same comparison, repetitions of an identical variant differed by up to a factor of two (6{,}285 against
+12{,}043 ops/s), more than any difference between the variants. The Stage I
 sweep used one run per point in order of increasing load, so drift and load were confounded, and the differences between
 the three fitted curves are within this noise. Stage II therefore uses dedicated virtual machines, replicates and a
 randomized run order.
@@ -173,10 +185,29 @@ thread, merged at the end, and percentiles are computed exactly by sorting. Thro
 operations divided by the measurement window; failed operations are counted by exception type and excluded.
 
 \paragraph{Run protocol and checks that the client is not the bottleneck.}
-During every run the client machine records its own CPU utilization; a run with a client above about 70\% busy would
-measure the client and not ZooKeeper. The runner also aborts if the client prints more than a few lines of output
-(Section~\ref{sec:corrections}), and verifies, before the first run of each block, that the server-side factors were
-really applied (the JVM flag \texttt{forceSync} and the directory of the transaction log).
+During every run the client machine samples its own CPU utilization (\texttt{vmstat}, once per second, over the measured
+window); a run with a client above about 70\% busy would measure the client and not ZooKeeper. The runner also aborts if
+the client prints more than a few lines of output (Section~\ref{sec:corrections}), and verifies on every server, before
+the first run of each block, that the server-side factors were really applied: the \texttt{forceSync} flag in the
+arguments of the running JVM and the directory of the transaction log reported by the server itself.
+
+\paragraph{ZooKeeper's own view of the pipeline.}
+ZooKeeper~3.9 keeps a summary per pipeline stage (count and sum of, for example, the time a request waits for the
+request-preparation thread, the time it waits for and spends in the log-sync stage, the number of requests written per
+\texttt{fsync}, the \texttt{fsync} time and the time until a quorum has acknowledged a proposal) and reports them through
+the \texttt{mntr} command. Around every run of the USL sweep and of the probe runs we take a snapshot of every server;
+the difference of two snapshots divided by the difference of the counts is the mean of that stage over that run alone.
+These timers have a resolution of 1\,ms (the \texttt{fsync} time is truncated to whole milliseconds), which is why the
+\texttt{fsync} is also measured with eBPF in microseconds.
+
+\paragraph{Evaluation process.}
+The evaluation is three experiments, all scripted (\path{gce/vm_jobs.sh}) and all with their raw data in the
+repository: (1) the factorial experiment of Section~\ref{sec:design}, 64 runs in a randomized, blocked order that is fixed
+before the first run (\path{factorial/plan_gce/plan.csv}); (2) one USL curve, 13 load levels with three replicates in
+random order, with the per-stage counters around every run (Section~\ref{sec:usl}); (3) the probe runs, one per
+combination of \texttt{forceSync} and log disk, each paired with an identical run without probes to measure their
+overhead (Section~\ref{sec:ebpf}). The analysis scripts were validated on synthetic data with known effects before they
+were applied to measurements.
 
 \paragraph{Threats to validity.}
 Virtual machines on a shared cloud have neighbours we cannot control; replicates and randomization are our defence.
@@ -191,28 +222,42 @@ The servers are in one zone, so inter-server round trips are far shorter than in
 Table~\ref{tab:params} lists the parameters that can influence the system under test. The factors of the experiment are
 chosen among them; the others are fixed and reported so that the experiment can be repeated.
 
-\begin{table}[t]
+\begin{table}[!tbp]
   \centering
-  \caption{System and workload parameters. The six parameters in bold are the factors of the experiment.}
+  \caption{System and workload parameters. The six in bold are the factors of the experiment (their letter in the last
+    column); the others are fixed at the value shown. Defaults are those of ZooKeeper~3.9~\cite{zookeeper_admin}.}
   \label{tab:params}
   \footnotesize
-  \begin{tabular}{@{}lll@{}}
+  \begin{tabularx}{\linewidth}{@{}>{\hsize=1.1\hsize\raggedright\arraybackslash}X>{\hsize=0.9\hsize\raggedright\arraybackslash}Xl@{}}
     \toprule
-    Parameter & Values & Role \\
+    Parameter & Value(s) & Role \\
     \midrule
-    \textbf{Ensemble size} & 3, 5 & factor \\
-    \textbf{forceSync} (fsync of the transaction log) & yes, no & factor \\
-    \textbf{Log disk} (device of \texttt{dataLogDir}) & pd-balanced, pd-ssd & factor \\
-    \textbf{Concurrent clients} & 10, 160 & factor \\
-    \textbf{Write ratio} & 0.1, 0.5 & factor \\
-    \textbf{Payload size} & 128\,B, 4\,KiB & factor \\
-    Server JVM heap, \texttt{tickTime}, client-connection limit & 1\,GB, 2000\,ms, none & fixed \\
-    Machine types and zone & see Section~\ref{sec:method} & fixed \\
-    Znode pool, key distribution & 200 znodes, uniform & fixed \\
-    Client model & closed loop, one session per client, synchronous & fixed \\
-    Run length & 5\,s warm-up + 20\,s measured; fresh pool, fresh servers per block & fixed \\
+    \multicolumn{3}{@{}l}{\emph{System}} \\
+    \textbf{Ensemble size} (voting servers) & 3, 5 & A \\
+    \textbf{\texttt{forceSync}} (fsync of the transaction log) & yes, no & D \\
+    \textbf{Log disk} (device of \texttt{dataLogDir}) & pd-balanced, pd-ssd (20\,GB each) & F \\
+    Observers (non-voting servers) & 0 & fixed \\
+    Snapshot device (\texttt{dataDir}) & boot disk (pd-balanced) & fixed \\
+    \texttt{snapCount}, \texttt{preAllocSize} & 100{,}000, 64\,MB (defaults) & fixed \\
+    Log batching (\texttt{maxBatchSize}, \texttt{flushDelay}) & 1000, 0 (defaults: flush when the queue is empty) & fixed \\
+    \texttt{globalOutstandingLimit}, \texttt{maxClientCnxns} & 1000 (default), no limit & fixed \\
+    \texttt{tickTime}, \texttt{initLimit}, \texttt{syncLimit} & 2000\,ms, 10, 5 & fixed \\
+    \texttt{leaderServes} (leader accepts clients) & yes (default) & fixed \\
+    Server JVM & JDK~17, 1\,GB heap, G1 collector & fixed \\
+    Versions & ZooKeeper 3.9.3; client library 3.9.0 & fixed \\
+    Machines and network & see Section~\ref{sec:method}; one zone & fixed \\
+    \multicolumn{3}{@{}l}{\emph{Workload}} \\
+    \textbf{Concurrent clients} (one session each) & 10, 160 & C \\
+    \textbf{Write ratio} (\texttt{setData} vs.\ \texttt{getData}) & 0.1, 0.5 & B \\
+    \textbf{Payload size} & 128\,B, 4\,KiB & E \\
+    Operations & \texttt{getData}, \texttt{setData}; no creates, deletes, watches or multi-operations & fixed \\
+    Key space and popularity & 200 znodes, uniform & fixed \\
+    Client model & closed loop, synchronous, no think time & fixed \\
+    Session placement & random server of the connect string (all servers) & fixed \\
+    Run length & 5\,s warm-up + 20\,s measured; new znode pool per run & fixed \\
+    Load generator & one VM, JVM heap 1--2\,GB & fixed \\
     \bottomrule
-  \end{tabular}
+  \end{tabularx}
 \end{table}
 
 \subsection{Metrics}
@@ -220,7 +265,10 @@ chosen among them; the others are fixed and reported so that the experiment can 
 The primary metric is \emph{throughput} (successful operations per second), because the USL is a model of throughput. The
 secondary metric is the \emph{99th percentile write latency}: coordination services sit on the critical path of other
 systems, so the tail of the write path matters as much as its rate. Read latency is recorded but is not a response of
-the design, because reads never leave the server they are sent to.
+the design, because reads never leave the server they are sent to. The mean latency is not a response either: in a closed
+loop without think time, Little's law gives a mean response time of $R=N/X$ for $N$ clients, so it carries no information
+beyond the throughput, whereas the 99th percentile does. Two further quantities are recorded in every run as validity
+checks, not responses: the number of failed operations and the CPU utilization of the load generator.
 
 \subsection{Factors and levels}
 
@@ -228,7 +276,12 @@ Each factor is tied to a hypothesis from Stage I about where the cost of the wri
 (Table~\ref{tab:factors}). The low level of the number of clients (10) lies below the saturation knee measured in Stage I and
 the high level (160) lies well beyond it; the write ratio 0.1 is close to the production ratio of about 10:1
 cited in~\cite{mit_6824_zookeeper} and 0.5 stresses the write pipeline. Disabling \texttt{forceSync} removes the log-sync
-stage from the write path; it is a controlled probe, not a recommendation.
+stage from the write path; it is a controlled probe, not a recommendation. Ensembles of three and five servers are the two
+sizes used in practice (they tolerate one and two failures). The payloads bracket small metadata (128\,B) and
+configuration blobs (4\,KiB), far below the 1\,MB limit of a znode. pd-balanced and pd-ssd are the two Persistent Disk
+types a dedicated log device would realistically use; Persistent Disk performance grows with the size of the disk and of
+the machine, so with 20\,GB disks on two-vCPU servers these are levels of this testbed rather than of the disk types in
+general.
 
 \begin{table}[t]
   \centering
@@ -248,6 +301,16 @@ main effects and all fifteen two-factor interactions are estimated cleanly from 
 (Table~\ref{tab:alias}). With two replicates the experiment has 64 runs and 32 degrees of freedom for the error, which
 gives confidence intervals on every effect. The full sign table is in Appendix~\ref{app:sign}.
 
+\paragraph{Why this fraction, and how the sign table is built.} A full $2^6$ design would need 128 runs for two replicates;
+the half fraction needs 64 and loses nothing we intend to estimate, because what it confounds with the main effects and
+two-factor interactions are interactions of order five and four. A quarter fraction ($2^{6-2}$, 16 runs per replicate)
+would have resolution IV: two-factor interactions would be aliased in pairs, and that is exactly where hypotheses H2--H4
+sit. The sign table is the full $2^5$ table of factors A--E with the column of F computed as the product $ABCDE$ of the
+other five; every column is balanced and orthogonal to all others (checked by \texttt{design.py}). The effect of a factor
+or interaction is the inner product of its column of signs with the 32 run means, divided by 32; the column of an
+interaction is the product of the columns of its factors. The plan, with its run order, was generated with a fixed seed
+before the first run and is part of the repository.
+
 \begin{table}[t]
   \centering
   \caption{Alias structure ($I=ABCDEF$, resolution VI): main effects and two-factor interactions.}
@@ -258,7 +321,7 @@ gives confidence intervals on every effect. The full sign table is in Appendix~\
 
 \paragraph{Restricted randomization.} Ensemble size, \texttt{forceSync} and log disk require restarting and reconfiguring the
 servers. Runs that share the levels of these three factors form a \emph{block} (eight blocks of four runs per
-replicate). The order of the blocks is randomized independently in each replicate and the order of the runs inside a
+replicate, so 16 server rebuilds instead of 64). The order of the blocks is randomized independently in each replicate and the order of the runs inside a
 block is randomized as well. Because every replicate rebuilds the servers from scratch, restart-to-restart variability enters
 the pure-error estimate. This is not a full split-plot analysis: a proper one would test the three hard-to-change factors
 against a separate whole-plot error with fewer degrees of freedom, so their confidence intervals may be somewhat
@@ -271,10 +334,10 @@ run $i$ and $n=32$ the number of runs. The effects, the allocation of variation 
 \begin{equation}
   q_j=\frac1n\sum_{i} s_{ij}\,\bar y_i,\qquad
   SS_j=n\,r\,q_j^2,\qquad
-  SSE=\sum_{i,k}(y_{ik}-\bar y_i)^2,\qquad
-  SST=SSE+\sum_j SS_j,
+  SSE=\sum_{i,k}(y_{ik}-\bar y_i)^2,
 \end{equation}
 \begin{equation}
+  SST=SSE+\sum_j SS_j,\qquad
   s_e^2=\frac{SSE}{n(r-1)},\qquad
   q_j \pm t_{[0.975;\,n(r-1)]}\,\frac{s_e}{\sqrt{n\,r}} .
 \end{equation}
@@ -356,31 +419,69 @@ $\beta$ is claimed only if the data justify the extra parameter; and a fit on th
   \label{fig:usl}
 \end{figure}
 
-\subsection{eBPF probes}
-\label{sec:ebpf}
-
-We wrote four probes that observe the server's operating system while the benchmark runs, each aimed at one suspected limit of
-Table~\ref{tab:limits}.
-\begin{itemize}
-  \item \textbf{fsync latency}: a bpftrace program~\cite{gregg_bpf} on the tracepoints \texttt{sys\_enter/exit\_fsync} and
-    \texttt{fdatasync}, filtered to the ZooKeeper process. It gives the number of calls and a latency histogram of the log-sync stage.
-    With \texttt{forceSync=no} it must show no calls, which also verifies that factor D was applied.
-  \item \textbf{Block I/O latency}: bcc's \texttt{biolatency}, to see whether the log disk itself is slow underneath the fsync;
-    compared between pd-balanced and pd-ssd.
-  \item \textbf{Run-queue latency}: bcc's \texttt{runqlat} on the ZooKeeper process, to see whether the server waits for a CPU, which would
-    add to $\alpha$ independently of the disk.
-  \item \textbf{TCP retransmissions}: a bpftrace program on \texttt{tcp:tcp\_retransmit\_skb}, to see whether packet loss between the
-    servers adds retransmission timeouts to the quorum wait, which would show in $\beta$.
-\end{itemize}
-Probes add a small overhead, so they were run in separate runs of the saturated configuration, at both levels of
-\texttt{forceSync} and of the log disk, and never during the runs of the factorial experiment.
+\paragraph{Where the time of a write goes.}
+% src: usl/mntr/, usl/out/stage_breakdown.csv (usl/stage_breakdown.py)
+The fit says how much of the work is serialized; ZooKeeper's per-stage counters (Section~\ref{sec:method}) say where.
+Table~\ref{tab:stages} gives, at four load levels of the curve, the mean time a write spent on the leader waiting for the
+request-preparation thread, waiting for the log-sync thread, until its batch was on disk and until a quorum had
+acknowledged it, and the number of requests written per \texttt{fsync} (all levels: Fig.~\ref{fig:stages} in the
+appendix). A stage whose waiting time grows with $N$ while the others stay flat is the serialized stage behind $\alpha$;
+a growing batch shows group commit amortizing the \texttt{fsync} as the load rises.
+\todo{interpretation with the numbers: which stage's queueing grows with $N$, how much of the time until the quorum ACK is the
+\texttt{fsync}, how the batch grows, and whether that matches $\alpha$ (and $\beta$).}
 
 \begin{table}[t]
   \centering
-  \caption{eBPF measurements on the leader during a 40\,s saturated run; percentiles are upper bounds of histogram buckets.}
+  \caption{Time per pipeline stage on the leader (ms, mean per run, averaged over the replicates) and requests written per
+    \texttt{fsync}, at four load levels of the USL curve; the server-side write latency is pooled over all servers. From
+    ZooKeeper's own counters (1\,ms resolution).}
+  \label{tab:stages}
+  \footnotesize
+  \IfFileExists{stage_breakdown.tex}{\input{stage_breakdown.tex}}{\todo{usl/stage\_breakdown.py --tex report/stage\_breakdown.tex}}
+\end{table}
+
+\subsection{eBPF probes}
+\label{sec:ebpf}
+
+Five probes observe the leader's operating system while the benchmark runs; three are our own bpftrace
+programs~\cite{gregg_bpf} and two are bcc tools. Each is aimed at one suspected limit of Table~\ref{tab:limits}.
+\begin{itemize}
+  \item \textbf{fsync latency} (ours): tracepoints \texttt{syscalls:sys\_enter/exit\_fsync} and \texttt{fdatasync}, filtered to the
+    ZooKeeper JVM. Number of calls and latency histogram of the log-sync stage, in microseconds. With \texttt{forceSync=no}
+    it must see (almost) no calls, which also verifies that factor D was applied.
+  \item \textbf{Block I/O latency} (bcc \texttt{biolatency}, per disk): block-layer tracepoints. Whether the log disk itself is
+    slow underneath the \texttt{fsync}; compared between pd-balanced and pd-ssd.
+  \item \textbf{Run-queue latency} (bcc \texttt{runqlat}, threads of the JVM only): scheduler tracepoints, from wake-up to
+    running. Whether the server waits for a CPU, which would add to $\alpha$ independently of the disk.
+  \item \textbf{TCP retransmissions} (ours): the \texttt{tcp} tracepoints \texttt{tcp\_retransmit\_skb} and
+    \texttt{tcp\_send\_reset}. Whether packet loss adds retransmission timeouts to the round trips of the quorum.
+  \item \textbf{CPU per pipeline thread} (ours): a 99\,Hz \texttt{profile} probe filtered to the JVM and keyed by thread name.
+    ZooKeeper runs each stage in a named thread (request preparation, log sync, commit, client connections) and the JVM
+    passes the names to Linux, so this is the CPU used by each stage; a single-threaded stage close to one full core is a
+    serialized bottleneck.
+\end{itemize}
+The probes run in separate runs of a saturating configuration (3 servers, 80 clients, write ratio 0.5), at both levels of
+\texttt{forceSync} and of the log disk, never during the factorial runs. Every probed run is paired with an identical run
+without probes, so that their overhead is measured, and ZooKeeper's counters are read around it (Table~\ref{tab:ebpfzk}).
+
+\begin{table}[t]
+  \centering
+  \caption{eBPF measurements on the leader: a 45\,s probe window around a run of 25\,s measured (80 clients, write ratio 0.5);
+    percentiles are upper bounds of log$_2$ histogram buckets.}
   \label{tab:ebpf}
   \footnotesize
   \IfFileExists{ebpf_summary.tex}{\input{ebpf_summary.tex}}{\todo{run ebpf/summarize.py --tex report/ebpf\_summary.tex}}
+\end{table}
+
+\begin{table}[t]
+  \centering
+  \caption{The same runs seen by ZooKeeper and by the thread probe: throughput with and without the probes, requests written
+    per \texttt{fsync}, ZooKeeper's own \texttt{fsync} time and time until a quorum ACK (leader means over the run), and the CPU
+    (in cores) used by the busiest pipeline threads of the leader.}
+  \label{tab:ebpfzk}
+  \footnotesize
+  \IfFileExists{ebpf_summary_zk.tex}{\input{ebpf_summary_zk.tex}}{\todo{ebpf/summarize.py: ebpf\_summary\_zk.tex}}\\[4pt]
+  \IfFileExists{ebpf_summary_threads.tex}{\input{ebpf_summary_threads.tex}}{\todo{ebpf/summarize.py: ebpf\_summary\_threads.tex}}
 \end{table}
 
 \todo{Interpretation. What fraction of the write latency is the fsync (compare its p50 with the benchmark's write latency)? Does the
@@ -449,7 +550,7 @@ sweep with the corrected client (Table~\ref{tab:chaos}).
 \end{table}
 
 With one client throughput falls $116\times$ (not $27\times$ as reported in Stage I, which compared with the Python baseline), but at 80
-clients it falls only $9.5\times$. Throughput per client is constant at about 21.5 ops/s, that is $1/48.5$\,ms: a closed-loop client
+clients it falls only $9.5\times$. Throughput per client is constant at about 21.5 ops/s, one operation every 46.5\,ms: a closed-loop client
 completes one operation per round trip, and $N$ clients in parallel complete $N$ operations as long as the server is not busy. The fitted $\alpha$
 and $\beta$ are therefore near zero: the delay hides the server, and the saturation point has moved beyond the loads we tested. $\alpha$ and
 $\beta$ describe the regime that was measured and are not constants of the system. The latencies give a direct view of the write pipeline: the
@@ -461,33 +562,41 @@ proposal, acknowledgment, commit, reply), which is what Figure~\ref{fig:pipeline
 
 Each term of the USL corresponds to a part of the write pipeline (Table~\ref{tab:limits}). Reads are different: a read is answered
 by the server the client is attached to without any coordination, so reads are limited by that server's CPU and not by the leader.
+In the curve of Section~\ref{sec:usl}, $N$ is the number of clients and the ensemble is fixed at three servers, so the cost of
+the quorum per write (one proposal to each follower, a majority of acknowledgments, a commit) does not change with $N$: it is
+part of $\gamma$, and of $\alpha$ where it is serialized, but it is not what $\beta$ measures. The effect of the number of servers
+is measured separately, as factor A of the factorial experiment, and appears in the last row of the table.
 
 \begin{table}[t]
   \centering
-  \caption{USL terms, the pipeline stage each one points to, the evidence of this work and a mitigation.}
+  \caption{USL terms (and the ensemble size), the pipeline stage each one points to, the evidence of this work and a mitigation.}
   \label{tab:limits}
   \footnotesize
-  \begin{tabular}{@{}p{0.9cm}p{3.4cm}p{3.5cm}p{3.9cm}@{}}
+  \begin{tabular}{@{}p{1.1cm}p{3.5cm}p{3.4cm}p{3.7cm}@{}}
     \toprule
     Term & Pipeline stage & Evidence & Mitigation \\
     \midrule
-    $\alpha$ & Serialized request pipeline of the leader: request preparation, then the log-sync stage (append and \texttt{fsync} of the log) and
-      the commit stage
-      & \todo{effect of D and F in the factorial; fsync probe: calls and p99}
-      & Faster, dedicated log device; batching of log writes (group commit); fewer, larger writes by the clients (multi-operations) \\
-    $\beta$ & Quorum acknowledgment: the leader exchanges messages with every follower and waits for a majority; the cost grows with the ensemble
-      & \todo{effect of A and A$\times$B; TCP probe; coherency term of the fit}
-      & Keep the voting ensemble small; add \emph{observers} (non-voting servers) to scale reads without enlarging the quorum; hierarchical
-        quorums or weights across zones \\
-    $\gamma$ & Cost of one request in isolation: network round trips, serialization, payload bytes, the fsync of a single write
-      & \todo{effect of E; one-client latencies}
+    $\alpha$ & Serialized stages of the leader: request preparation (one thread assigns every zxid), the log-sync stage (one
+      thread appends and \texttt{fsync}s, a batch at a time) and the commit stage
+      & \todo{CPU of these threads (thread probe); growth of their queueing with $N$ (Table~\ref{tab:stages}); effect of D and F}
+      & Faster, dedicated log device; larger group-commit batches; fewer, larger writes by the clients (multi-operations) \\
+    $\beta$ & Interference between concurrent requests that grows with pairs of clients: in the commit stage a committed write
+      waits for the reads in progress; per-session work on the servers; garbage collection
+      & \todo{whether AIC and the F-test support $\beta$; commit-stage times against $N$}
+      & Fewer, longer-lived sessions; separate read and write clients; \emph{observers} to take reads off the voting servers \\
+    $\gamma$ & Cost of one request in isolation: network round trips (forward, proposal, acknowledgment, commit), serialization,
+      payload bytes, the \texttt{fsync} of a single write
+      & \todo{effect of E; one-client latencies; time until quorum ACK at $N=1$}
       & Asynchronous clients that pipeline several requests per session; smaller payloads \\
+    Servers (factor A) & Quorum size: each proposal goes to every follower and the leader waits for a majority
+      & \todo{effect of A and A$\times$B; TCP probe}
+      & Keep the voting ensemble small; observers to scale reads without enlarging the quorum; hierarchical quorums \\
     \bottomrule
   \end{tabular}
 \end{table}
 
 \todo{One paragraph that names the stage that dominates in the measurements, with the numbers, and states which mitigation the data support.
-If forceSync (D) has no effect, the log-sync stage is not the bottleneck: look at the leader's CPU (run-queue probe) and at the request-preparation stage.}
+If forceSync (D) has no effect, the log-sync stage is not the bottleneck: look at the leader's CPU (thread and run-queue probes) and at the request-preparation stage.}
 
 \section{Conclusion}
 
@@ -495,8 +604,8 @@ If forceSync (D) has no effect, the log-sync stage is not the bottleneck: look a
 fitted USL, whether $\beta$ is justified, and the stage that $\alpha$ points to; (3) what the probes confirmed or refuted.}
 Two methodological lessons are already clear. First, a load generator must be validated before its numbers are interpreted: in Stage I a client that
 logged every operation produced a contention coefficient that looked like a property of ZooKeeper and was not, and the check that exposed it was
-counting the lines of output of the client. Second, on shared hardware a single run per point cannot separate an effect from drift (identical runs varied
-by about $\pm$20\%), so every conclusion in this report rests on replicated, randomized runs on dedicated machines.
+counting the lines of output of the client. Second, on shared hardware a single run per point cannot separate an effect from drift (identical runs
+differed by up to a factor of two), so every conclusion in this report rests on replicated, randomized runs on dedicated machines.
 \todo{limitations: one zone; virtual machines on shared hosts; hard-to-change factors analysed with the pooled error; the sweep and the factorial cover one
 write ratio and payload each unless stated.}
 
@@ -509,6 +618,17 @@ write ratio and payload each unless stated.}
   \caption{Sign table of the $2^{6-1}$ design (run $\times$ factor, $\pm1$) with the mean throughput of the two replicates.}
   \IfFileExists{design_signtable.tex}{\input{design_signtable.tex}}{\todo{run factorial/make\_tex.py --results}}
 \end{table}
+
+\section{Per-stage times at every load level}
+\label{app:stages}
+\begin{figure}[h]
+  \centering
+  \IfFileExists{stage_breakdown.png}{\includegraphics[width=\textwidth]{stage_breakdown.png}}{\todo{copy usl/out/stage\_breakdown.png to report/}}
+  \caption{Time per pipeline stage (left) and requests written per \texttt{fsync} (right) against the number of clients, for
+    every load level of the USL curve: leader means per run, averaged over the replicates (the server-side write latency is
+    pooled over all servers).}
+  \label{fig:stages}
+\end{figure}
 
 \begin{thebibliography}{12}
 
@@ -527,6 +647,12 @@ Apache Software Foundation.
 \newblock ZooKeeper: A Distributed Coordination Service for Distributed Applications.
 \newblock ZooKeeper 3.9.6 documentation, 2024.
 \newblock \url{https://zookeeper.apache.org/doc/r3.9.6/zookeeperOver.html}.
+
+\bibitem{zookeeper_admin}
+Apache Software Foundation.
+\newblock ZooKeeper Administrator's Guide.
+\newblock ZooKeeper 3.9.3 documentation.
+\newblock \url{https://zookeeper.apache.org/doc/r3.9.3/zookeeperAdmin.html}.
 
 \bibitem{mit_6824_zookeeper}
 MIT 6.824: Distributed Systems.
