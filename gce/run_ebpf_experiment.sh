@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # run_ebpf_experiment.sh - the eBPF probes on the LEADER while a saturating benchmark runs from this VM (zkclient).
 #
-# For every configuration: rebuild the ensemble, find the leader, run the benchmark once WITHOUT probes (overhead
-# baseline), then again WITH the five probes attached to the leader's JVM, snapshot `mntr` of every server around the
-# probed run, and fetch the probe output. Finally writes the comparison tables for the report.
+# For every configuration: rebuild the ensemble, find the leader, warm the JIT and the servers with a discarded run,
+# then run the benchmark WITHOUT probes, WITH the five probes attached to the leader's JVM, and WITHOUT probes again
+# (the overhead is measured against the mean of the two, so drift and warm-up do not bias it), snapshot `mntr` of
+# every server around the probed run, and fetch the probe output. Finally writes the comparison tables for the report.
 #
 #   CONFIGS="yes:ssd no:ssd yes:balanced no:balanced" CLIENTS=80 WR=0.5 ./gce/run_ebpf_experiment.sh
 #
@@ -42,6 +43,8 @@ for c in $CONFIGS; do
   echo "== $label: leader $LEADER, $CLIENTS clients, write ratio $WR"
   scp "${SSHO[@]}" -rq ebpf "$SSH_USER@$LEADER:/tmp/" || { echo "could not copy the probes to $LEADER"; exit 1; }
 
+  java -Xms1g -Xmx2g -jar "$JAR" --hosts "$HOSTS" --ensemble-size "$N" --clients "$CLIENTS" --write-ratio "$WR" \
+       --duration 10 --warmup 2 --output /dev/null > "$d/warmup_stdout.txt" 2>&1      # discarded: JIT and servers warm
   bench "$d/bench_noprobe.csv" "$d/bench_noprobe_stdout.txt"
   mntr_all before
   ssh "${SSHO[@]}" "$SSH_USER@$LEADER" "sudo rm -rf /tmp/probe_out && sudo bash /tmp/ebpf/run_probes.sh $PROBE_S /tmp/probe_out" \
@@ -51,10 +54,11 @@ for c in $CONFIGS; do
   bench "$d/bench.csv" "$d/bench_stdout.txt"
   mntr_all after
   wait "$PP"
+  bench "$d/bench_noprobe.csv" "$d/bench_noprobe2_stdout.txt"                     # second run without probes
   scp "${SSHO[@]}" -q "$SSH_USER@$LEADER:/tmp/probe_out/*" "$d/" || echo "WARNING: could not fetch the probe output for $c"
   printf 'config=%s force_sync=%s log_disk=%s ensemble=%s clients=%s write_ratio=%s leader=%s probe_s=%s duration=%s warmup=%s\n' \
     "$c" "$fs" "$disk" "$N" "$CLIENTS" "$WR" "$LEADER" "$PROBE_S" "$DUR" "$WARM" > "$d/config.txt"
-  echo "   ops/s without probes: $(tail -1 "$d/bench_noprobe.csv" | cut -d, -f12)   with probes: $(tail -1 "$d/bench.csv" | cut -d, -f12)"
+  echo "   ops/s without probes: $(tail -n +2 "$d/bench_noprobe.csv" | cut -d, -f12 | tr '\n' ' ')  with probes: $(tail -1 "$d/bench.csv" | cut -d, -f12)"
   grep -E "@fsync_calls" "$d/fsync_latency.txt" 2>/dev/null | sed 's/^/   /' || true
   args+=("$label=$d")
 done

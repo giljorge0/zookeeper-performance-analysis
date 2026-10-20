@@ -110,7 +110,9 @@ ebpf/                          five probes
   fsync_latency.bt               bpftrace: fsync/fdatasync latency of the ZooKeeper JVM
   tcp_retrans.bt                 bpftrace: TCP retransmissions and resets
   zk_threads.bt                  bpftrace: CPU per JVM thread, i.e. per pipeline stage (99 Hz sampling)
-  run_probes.sh                  runs the three bpftrace probes plus bcc biolatency and runqlat
+  disk_latency.bt                bpftrace: block I/O latency per disk (block tracepoints)
+  run_probes.sh                  runs the four bpftrace probes plus bcc runqlat
+  local_probe_check.sh           the five probes against a local Docker leader (needs sudo)
   summarize.py                   probe output, benchmark rows and mntr deltas -> comparison tables
   test_summarize.py              checks the parsers on synthetic bpftrace/bcc output
 
@@ -298,9 +300,9 @@ write_p50_ms, write_p99_ms, total_ops_err, client_cpu_busy_pct` (the load genera
 the leader's mean prep-queue, sync-queue, sync-queue+flush, fsync and until-quorum-ACK times (ms), the group-commit batch
 (requests per fsync) and the server-side write latency pooled over all servers.
 
-**eBPF** (one directory per configuration, e.g. `ebpf_results_gce/fsync_yes_ssd/`): `fsync_latency.txt`, `biolatency.txt`,
+**eBPF** (one directory per configuration, e.g. `ebpf_results_gce/fsync_yes_ssd/`): `fsync_latency.txt`, `disk_latency.txt`,
 `runqlat.txt`, `tcp_retrans.txt`, `zk_threads.txt`, `thread_names.txt`, `meta.txt` (PID, kernel, log-disk device names),
-`config.txt`, `bench.csv` / `bench_noprobe.csv` (with and without the probes), `mntr_{before,after}_<server>.txt`;
+`config.txt`, `bench.csv` / `bench_noprobe.csv` (with the probes / the runs before and after without them), `mntr_{before,after}_<server>.txt`;
 `summary.json` (all parsed values).
 
 ---

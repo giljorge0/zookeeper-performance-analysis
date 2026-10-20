@@ -1,0 +1,26 @@
+#!/usr/bin/env bpftrace
+/*
+ * disk_latency.bt - block I/O latency per disk (issue -> completion), from the block-layer tracepoints.
+ * Underneath every fsync of the transaction log there are writes to the log disk; this shows how long the device
+ * itself takes, per device, so pd-balanced and pd-ssd can be compared under the same load.
+ * Replaces bcc's biolatency, whose kprobe (blk_account_io_done) is not traceable on the Debian 12 kernel (6.1).
+ * The map key is the kernel's dev_t of the disk: (major << 20) | minor.
+ * Usage: sudo bpftrace disk_latency.bt
+ */
+tracepoint:block:block_rq_issue
+{
+  @start[args->dev, args->sector] = nsecs;
+}
+
+tracepoint:block:block_rq_complete
+/@start[args->dev, args->sector]/
+{
+  @disk_latency_us[args->dev] = hist((nsecs - @start[args->dev, args->sector]) / 1000);
+  @disk_ios[args->dev] = count();
+  delete(@start[args->dev, args->sector]);
+}
+
+END
+{
+  clear(@start);
+}

@@ -25,6 +25,8 @@ rm -rf "$OUT"; mkdir -p "$OUT"
 bench() { java -jar "$JAR" --hosts "$HOSTS" --ensemble-size 3 --clients 80 --write-ratio 0.5 --duration 25 --warmup 3 \
                --output "$1" > "$2" 2>&1; }
 mntr_all() { for p in 2181 2182 2183; do echo mntr | nc -w2 127.0.0.1 "$p" > "$OUT/mntr_$1_127.0.0.1_$p.txt"; done; }
+java -jar "$JAR" --hosts "$HOSTS" --ensemble-size 3 --clients 80 --write-ratio 0.5 --duration 10 --warmup 2 \
+     --output /dev/null > /dev/null 2>&1           # discarded warm-up run
 bench "$OUT/bench_noprobe.csv" "$OUT/bench_noprobe_stdout.txt"
 mntr_all before
 bash ebpf/run_probes.sh 45 "$OUT" "$PID" > "$OUT/probe_stdout.txt" 2>&1 &
@@ -33,8 +35,9 @@ sleep 8                                   # bcc compiles its programs before att
 bench "$OUT/bench.csv" "$OUT/bench_stdout.txt"
 mntr_all after
 wait "$PP"
-echo "config=local force_sync=yes log_disk=local ensemble=3 clients=80 write_ratio=0.5 leader=$LEADER" > "$OUT/config.txt"
+bench "$OUT/bench_noprobe.csv" "$OUT/bench_noprobe2_stdout.txt"   # second run without probes
+echo "config=local force_sync=yes log_disk=local ensemble=3 clients=80 write_ratio=0.5 leader=$LEADER duration=25 warmup=3" > "$OUT/config.txt"
 stop_ensemble >/dev/null 2>&1
 [ -n "${SUDO_USER:-}" ] && chown -R "$SUDO_USER": "$(dirname "$OUT")"
 python3 ebpf/summarize.py "local=$OUT"
-echo "raw probe output in $OUT/ (fsync_latency.txt, biolatency.txt, runqlat.txt, tcp_retrans.txt, zk_threads.txt)"
+echo "raw probe output in $OUT/ (fsync_latency.txt, disk_latency.txt, runqlat.txt, tcp_retrans.txt, zk_threads.txt)"

@@ -72,7 +72,7 @@ evaluation. Our contributions are:
     interactions that drive throughput and write tail latency (Sections~\ref{sec:design} and~\ref{sec:factorial});
   \item a single, well-supported USL fit, with the time a write spends in each pipeline stage measured at every load
     level, so that the coefficients can be tied to stages of the pipeline (Section~\ref{sec:usl});
-  \item five eBPF probes, three of them our own, that observe the log-sync stage, the disk, the scheduler, the network
+  \item five eBPF probes, four of them our own, that observe the log-sync stage, the disk, the scheduler, the network
     and the CPU of each pipeline thread from inside the kernel (Section~\ref{sec:ebpf}).
 \end{itemize}
 
@@ -443,14 +443,16 @@ a growing batch shows group commit amortizing the \texttt{fsync} as the load ris
 \subsection{eBPF probes}
 \label{sec:ebpf}
 
-Five probes observe the leader's operating system while the benchmark runs; three are our own bpftrace
-programs~\cite{gregg_bpf} and two are bcc tools. Each is aimed at one suspected limit of Table~\ref{tab:limits}.
+Five probes observe the leader's operating system while the benchmark runs; four are our own bpftrace
+programs~\cite{gregg_bpf} and one is a bcc tool. Each is aimed at one suspected limit of Table~\ref{tab:limits}.
 \begin{itemize}
   \item \textbf{fsync latency} (ours): tracepoints \texttt{syscalls:sys\_enter/exit\_fsync} and \texttt{fdatasync}, filtered to the
     ZooKeeper JVM. Number of calls and latency histogram of the log-sync stage, in microseconds. With \texttt{forceSync=no}
     it must see (almost) no calls, which also verifies that factor D was applied.
-  \item \textbf{Block I/O latency} (bcc \texttt{biolatency}, per disk): block-layer tracepoints. Whether the log disk itself is
-    slow underneath the \texttt{fsync}; compared between pd-balanced and pd-ssd.
+  \item \textbf{Block I/O latency} (ours, per disk): tracepoints \texttt{block\_rq\_issue} and \texttt{block\_rq\_complete}.
+    Whether the log disk itself is slow underneath the \texttt{fsync}; compared between pd-balanced and pd-ssd. (We first
+    used bcc's \texttt{biolatency}, but its kprobe, \texttt{blk\_account\_io\_done}, is not traceable on the 6.1 kernel
+    of the servers.)
   \item \textbf{Run-queue latency} (bcc \texttt{runqlat}, threads of the JVM only): scheduler tracepoints, from wake-up to
     running. Whether the server waits for a CPU, which would add to $\alpha$ independently of the disk.
   \item \textbf{TCP retransmissions} (ours): the \texttt{tcp} tracepoints \texttt{tcp\_retransmit\_skb} and
@@ -462,7 +464,8 @@ programs~\cite{gregg_bpf} and two are bcc tools. Each is aimed at one suspected 
 \end{itemize}
 The probes run in separate runs of a saturating configuration (3 servers, 80 clients, write ratio 0.5), at both levels of
 \texttt{forceSync} and of the log disk, never during the factorial runs. Every probed run is paired with an identical run
-without probes, so that their overhead is measured, and ZooKeeper's counters are read around it (Table~\ref{tab:ebpfzk}).
+without probes before it and another after it (the overhead is measured against their mean, after a discarded warm-up
+run), and ZooKeeper's counters are read around it (Table~\ref{tab:ebpfzk}).
 
 \begin{table}[t]
   \centering

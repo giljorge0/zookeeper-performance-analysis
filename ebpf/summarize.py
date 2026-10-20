@@ -10,12 +10,15 @@ by gce/run_ebpf_experiment.sh, also config.txt, bench.csv, bench_noprobe.csv and
 
 Parsed:
   fsync_latency.txt  bpftrace: fsync/fdatasync calls of the ZooKeeper JVM and their latency histogram
-  biolatency.txt     bcc biolatency -D: block I/O latency per disk. Only the active LOG disk is kept when meta.txt
-                     names the log devices (Compute Engine); otherwise all disks are merged
+  disk_latency.txt   bpftrace: block I/O latency per disk (dev_t). Only the active LOG disk is kept when meta.txt
+                     names the log devices (Compute Engine); otherwise all disks are merged. (biolatency.txt, from
+                     bcc's biolatency -D, is read instead when there is no disk_latency.txt.)
   runqlat.txt        bcc runqlat -p PID: run-queue latency of the JVM's threads (microseconds)
   tcp_retrans.txt    bpftrace: TCP retransmissions and resets sent (whole host)
-  zk_threads.txt     bpftrace: on-CPU samples per JVM thread name at 99 Hz -> CPU cores used per pipeline stage
-  bench*.csv         benchmark rows with and without the probes -> throughput and probe overhead
+  zk_threads.txt     bpftrace: on-CPU samples per JVM thread name at 99 Hz -> CPU cores used per pipeline stage,
+                     over the load window (warm-up + measured window + 2 s of setup, from config.txt) when it is known
+  bench*.csv         benchmark rows with and without the probes -> throughput and probe overhead (the runs without
+                     probes before and after the probed one are averaged)
   mntr_*.txt         ZooKeeper's own counters on the leader around the probed run -> requests per fsync (group
                      commit), ZooKeeper's fsync time, time until quorum ACK
 Histogram percentiles are the upper bound of the bucket that contains them.
@@ -39,6 +42,7 @@ BPFTRACE_BUCKET = re.compile(r"^\[(\d+[KMG]?)(?:,\s*(\d+[KMG]?))?\)?\]?\s+(\d+)\
 BCC_BUCKET = re.compile(r"^\s*(\d+)\s*->\s*(\d+)\s*:\s*(\d+)\s*\|")
 BCC_DISK = re.compile(r"^\s*disk\s*=\s*(?:b?['\"])?([^'\"\s]+)")
 SAMPLES = re.compile(r"^@samples\[(.*)\]:\s*(\d+)\s*$")
+KEYED_HIST = re.compile(r"^@(\w+)\[(.+?)\]:\s*$")
 SUFFIX = {"K": 1024, "M": 1024 ** 2, "G": 1024 ** 3}
 HZ = 99  # zk_threads.bt samples every CPU 99 times per second
 
@@ -107,6 +111,29 @@ def buckets_bpftrace(text, name):
     return out
 
 
+def keyed_buckets_bpftrace(text, name):
+    """Histograms of the keyed bpftrace map @name[key] -> {key: [(lo, hi, count)]}."""
+    out, cur = {}, None
+    for line in text.splitlines():
+        s = line.strip()
+        m = KEYED_HIST.match(s)
+        if m:
+            cur = m.group(2) if m.group(1) == name else None
+            if cur is not None:
+                out.setdefault(cur, [])
+            continue
+        if cur is None:
+            continue
+        b = BPFTRACE_BUCKET.match(s)
+        if b:
+            lo = num(b.group(1))
+            hi = num(b.group(2)) if b.group(2) else lo
+            out[cur].append((lo, hi, int(b.group(3))))
+        elif s.startswith("@"):
+            cur = None
+    return out
+
+
 def buckets_bcc(text):
     """bcc log2 histograms -> {section: [(lo, hi, count)]}; section is the disk name for biolatency -D, else None."""
     out, section = {}, None
@@ -149,12 +176,16 @@ def stage_of(thread):
     return "other"
 
 
-def last_row(path):
+def rows_of(path):
     try:
-        rows = list(csv.DictReader(open(path, newline="")))
+        return list(csv.DictReader(open(path, newline="")))
     except OSError:
-        return {}
-    return rows[-1] if rows else {}
+        return []
+
+
+def mean_of(rows, key):
+    vals = [v for v in (fnum(r.get(key)) for r in rows) if v is not None]
+    return sum(vals) / len(vals) if vals else None
 
 
 def leader_mntr(d):
@@ -177,23 +208,30 @@ def summarize(d):
     meta = kv(read(os.path.join(d, "meta.txt")))
     fs = read(os.path.join(d, "fsync_latency.txt"))
     fb = buckets_bpftrace(fs, "fsync_latency_us")
-    bio_sections = buckets_bcc(read(os.path.join(d, "biolatency.txt")))
-    dev = meta.get(f"logdev_{cfg.get('log_disk', '')}")
-    if dev and dev in bio_sections:
-        bio, bio_scope = bio_sections[dev], f"log disk ({dev})"
+    disk = cfg.get("log_disk", "")
+    dl = read(os.path.join(d, "disk_latency.txt"))
+    if dl:                                    # our block-tracepoint probe, keyed by dev_t
+        sections, dev = keyed_buckets_bpftrace(dl, "disk_latency_us"), meta.get(f"logdev_{disk}_devt")
+    else:                                     # bcc biolatency -D, keyed by device name
+        sections, dev = buckets_bcc(read(os.path.join(d, "biolatency.txt"))), meta.get(f"logdev_{disk}")
+    if dev and dev in sections:
+        bio, bio_scope = sections[dev], f"log disk ({meta.get(f'logdev_{disk}', dev)})"
     else:
-        bio, bio_scope = merged(bio_sections), "all disks"
+        bio, bio_scope = merged(sections), "all disks"
     rq = merged(buckets_bcc(read(os.path.join(d, "runqlat.txt"))))
     tcp = read(os.path.join(d, "tcp_retrans.txt"))
     th = read(os.path.join(d, "zk_threads.txt"))
     samples = {m.group(1): int(m.group(2)) for m in map(SAMPLES.match, th.splitlines()) if m}
     seconds = scalar(th, "seconds") or fnum(meta.get("duration"))
-    cores = {t: n / (HZ * seconds) for t, n in samples.items()} if seconds else {}
+    # the JVM is close to idle outside the benchmark, so divide by the load window when it is known
+    load = (fnum(cfg.get("warmup")) + fnum(cfg.get("duration")) + 2) if cfg.get("warmup") and cfg.get("duration") else None
+    window = min(seconds, load) if seconds and load else seconds
+    cores = {t: n / (HZ * window) for t, n in samples.items()} if window else {}
     stages = {}
     for t, c in cores.items():
         stages[stage_of(t)] = stages.get(stage_of(t), 0.0) + c
-    b, b0 = last_row(os.path.join(d, "bench.csv")), last_row(os.path.join(d, "bench_noprobe.csv"))
-    x, x0 = fnum(b.get("throughput_ops_sec")), fnum(b0.get("throughput_ops_sec"))
+    b, b0 = rows_of(os.path.join(d, "bench.csv")), rows_of(os.path.join(d, "bench_noprobe.csv"))
+    x, x0 = mean_of(b, "throughput_ops_sec"), mean_of(b0, "throughput_ops_sec")
     return {
         "config": cfg,
         "fsync_calls": scalar(fs, "fsync_calls") or 0,
@@ -202,12 +240,12 @@ def summarize(d):
         "bio_p50_us": pct(bio, 0.50), "bio_p99_us": pct(bio, 0.99),
         "runq_events": sum(c for _, _, c in rq), "runq_p50_us": pct(rq, 0.50), "runq_p99_us": pct(rq, 0.99),
         "tcp_retransmits": scalar(tcp, "retransmits") or 0, "tcp_resets_sent": scalar(tcp, "resets_sent") or 0,
-        "probe_seconds": seconds, "jvm_cores": sum(cores.values()) if cores else None,
+        "probe_seconds": seconds, "cpu_window_s": window, "jvm_cores": sum(cores.values()) if cores else None,
         "stage_cores": dict(sorted(stages.items(), key=lambda kv_: -kv_[1])),
         "thread_cores": dict(sorted(cores.items(), key=lambda kv_: -kv_[1])[:12]),
-        "throughput": x, "throughput_noprobe": x0,
+        "throughput": x, "throughput_noprobe": x0, "noprobe_runs": [fnum(r.get("throughput_ops_sec")) for r in b0],
         "probe_overhead_pct": 100 * (1 - x / x0) if x and x0 else None,
-        "write_p50_ms": fnum(b.get("write_p50_ms")), "errors": fnum(b.get("total_ops_err")),
+        "write_p50_ms": mean_of(b, "write_p50_ms"), "errors": mean_of(b, "total_ops_err"),
         "zk": leader_mntr(d),
     }
 
