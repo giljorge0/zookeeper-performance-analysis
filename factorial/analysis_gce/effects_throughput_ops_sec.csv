@@ -1,0 +1,32 @@
+effect,factors,aliased_with,q,ci_lo,ci_hi,pct_variation,significant
+B,B=write_ratio,ACDEF,-12741.5,-14193.3,-11289.7,48.330,1
+C,C=clients,ABDEF,8990.95,7539.16,10442.8,24.065,1
+BC,"B=write_ratio, C=clients",ADEF,-5171.7,-6623.5,-3719.91,7.962,1
+E,E=payload_bytes,ABCDF,-3939.06,-5390.86,-2487.27,4.619,1
+CD,"C=clients, D=force_sync",ABEF,-2847.43,-4299.23,-1395.63,2.414,1
+A,A=ensemble_size,BCDEF,2172.9,721.099,3624.69,1.406,1
+BE,"B=write_ratio, E=payload_bytes",ACDF,2105.78,653.987,3557.58,1.320,1
+AC,"A=ensemble_size, C=clients",BDEF,1704.85,253.049,3156.64,0.865,1
+AEF,"A=ensemble_size, E=payload_bytes, F=log_disk",BCD,1474.27,22.4744,2926.07,0.647,1
+EF,"E=payload_bytes, F=log_disk",ABCD,1366.98,-84.8209,2818.77,0.556,0
+CE,"C=clients, E=payload_bytes",ABDF,-1270.56,-2722.36,181.235,0.481,0
+AB,"A=ensemble_size, B=write_ratio",CDEF,-1188.06,-2639.86,263.738,0.420,0
+ACE,"A=ensemble_size, C=clients, E=payload_bytes",BDF,-1127.84,-2579.64,323.958,0.379,0
+AE,"A=ensemble_size, E=payload_bytes",BCDF,-1015.7,-2467.5,436.096,0.307,0
+ADF,"A=ensemble_size, D=force_sync, F=log_disk",BCE,907.006,-544.791,2358.8,0.245,0
+ABC,"A=ensemble_size, B=write_ratio, C=clients",DEF,-859.312,-2311.11,592.485,0.220,0
+ABD,"A=ensemble_size, B=write_ratio, D=force_sync",CEF,813.764,-638.033,2265.56,0.197,0
+DF,"D=force_sync, F=log_disk",ABCE,711.542,-740.255,2163.34,0.151,0
+BD,"B=write_ratio, D=force_sync",ACEF,689.891,-761.907,2141.69,0.142,0
+ABE,"A=ensemble_size, B=write_ratio, E=payload_bytes",CDF,629.633,-822.165,2081.43,0.118,0
+ACD,"A=ensemble_size, C=clients, D=force_sync",BEF,-523.145,-1974.94,928.652,0.081,0
+F,F=log_disk,ABCDE,-508.981,-1960.78,942.816,0.077,0
+CF,"C=clients, F=log_disk",ABDE,-496.5,-1948.3,955.297,0.073,0
+D,D=force_sync,ABCEF,-421.203,-1873,1030.59,0.053,0
+AD,"A=ensemble_size, D=force_sync",BCEF,-200.398,-1652.2,1251.4,0.012,0
+DE,"D=force_sync, E=payload_bytes",ABCF,191.092,-1260.71,1642.89,0.011,0
+ACF,"A=ensemble_size, C=clients, F=log_disk",BDE,-118.155,-1569.95,1333.64,0.004,0
+ABF,"A=ensemble_size, B=write_ratio, F=log_disk",CDE,-116.661,-1568.46,1335.14,0.004,0
+BF,"B=write_ratio, F=log_disk",ACDE,-51.7625,-1503.56,1400.03,0.001,0
+ADE,"A=ensemble_size, D=force_sync, E=payload_bytes",BCF,45.1406,-1406.66,1496.94,0.001,0
+AF,"A=ensemble_size, F=log_disk",BCDE,10.1141,-1441.68,1461.91,0.000,0

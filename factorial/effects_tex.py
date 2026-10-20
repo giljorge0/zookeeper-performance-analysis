@@ -22,8 +22,11 @@ def load(path):
     return {r["effect"]: r for r in csv.DictReader(open(path, newline=""))}
 
 
-def num(v, nd=3):
+def num(v, nd=3, log=False):
     x = float(v)
+    if log:                                   # log10 effects: fixed decimals, no "-0.000"
+        t = f"{x:.3f}"
+        return "0.000" if t == "-0.000" else t
     return f"{x:.{nd}g}" if abs(x) < 1000 else f"{x:.0f}"
 
 
@@ -49,7 +52,8 @@ def main():
     order.sort(key=lambda w: -max(float(tabs[r][w]["pct_variation"]) for r in a.response if w in tabs[r]))
 
     cols = "l" + "rrr" * len(a.response)
-    head1 = " & ".join(f"\\multicolumn{{3}}{{c}}{{{LABEL.get(r, r)}{', $\\log_{10}$' if r in a.log10 else ''}}}"
+    log_tag = ", $\\log_{10}$"   # kept out of the f-string: Python 3.11 allows no backslash in f-string expressions
+    head1 = " & ".join(f"\\multicolumn{{3}}{{c}}{{{LABEL.get(r, r)}{log_tag if r in a.log10 else ''}}}"
                        for r in a.response)
     head2 = " & ".join(("$q$ & 95\\% CI & \\%" if r not in a.log10 else "$q$ ($\\times$) & 95\\% CI & \\%")
                        for r in a.response)
@@ -64,11 +68,13 @@ def main():
                 if e is None:
                     cells += ["--", "--", "--"]
                     continue
-                q = num(e["q"])
-                if r in a.log10:
+                lg = r in a.log10
+                q = num(e["q"], log=lg)
+                if lg:
                     q += f" ($\\times${10 ** (2 * float(e['q'])):.2f})"
                 star = "" if e["significant"] == "1" else "$^\\dagger$"
-                cells += [q + star, f"[{num(e['ci_lo'])}, {num(e['ci_hi'])}]", f"{float(e['pct_variation']):.1f}"]
+                cells += [q + star, f"[{num(e['ci_lo'], log=lg)}, {num(e['ci_hi'], log=lg)}]",
+                          f"{float(e['pct_variation']):.1f}"]
             label = "$\\times$".join(w) if len(w) > 1 else w
             fh.write(f"{label} & " + " & ".join(cells) + " \\\\\n")
         fh.write("\\bottomrule\n\\end{tabular}\n")

@@ -1,0 +1,38 @@
+
+=== throughput_ops_sec (log10) ===
+runs=32  replicates=2  mean q0=4.31215  t(32) CI, s_e=0.0604
+unexplained (error) variation: 2.1%
+effect             q                    95% CI    %var  sig  aliases
+B            -0.2284   [   -0.244,   -0.213]   60.31  *    ACDEF  x0.35
+C             0.1486   [    0.133,    0.164]   25.55  *    ABDEF  x1.98
+E           -0.06598   [  -0.0814,  -0.0506]    5.03  *    ABCDF  x0.74
+CD          -0.05603   [  -0.0714,  -0.0407]    3.63  *    ABEF  x0.77
+A            0.02911   [   0.0137,   0.0445]    0.98  *    BCDEF  x1.14
+EF           0.02088   [   0.0055,   0.0363]    0.50  *    ABCD  x1.10
+AC           0.01801   [  0.00263,   0.0334]    0.38  *    BDEF  x1.09
+BC          -0.01635   [  -0.0317,-0.000967]    0.31  *    ADEF  x0.93
+D            0.01472   [-0.000661,   0.0301]    0.25       ABCEF  x1.07
+ACE         -0.01157   [  -0.0269,  0.00381]    0.15       BDF  x0.95
+ABF         -0.01118   [  -0.0266,   0.0042]    0.14       CDE  x0.95
+BD          0.008833   [ -0.00655,   0.0242]    0.09       ACEF  x1.04
+note: 31 effects are tested at 95%, so ~2 false positives are expected; judge importance by % variation, not by the star alone.
+8 of 31 effects significant; top 5 explain 95.5% of variation
+
+=== write_p99_ms (log10) ===
+runs=32  replicates=2  mean q0=0.967508  t(32) CI, s_e=0.08912
+unexplained (error) variation: 1.3%
+effect             q                    95% CI    %var  sig  aliases
+C             0.5338   [    0.511,    0.556]   93.72  *    ABDEF  x11.68
+E            0.06094   [   0.0382,   0.0836]    1.22  *    ABCDF  x1.32
+CD           0.05871   [    0.036,   0.0814]    1.13  *    ABEF  x1.31
+D           -0.04209   [  -0.0648,  -0.0194]    0.58  *    ABCEF  x0.82
+B            0.04114   [   0.0184,   0.0638]    0.56  *    ACDEF  x1.21
+AB          -0.03433   [   -0.057,  -0.0116]    0.39  *    CDEF  x0.85
+BE          -0.02221   [  -0.0449, 0.000484]    0.16       ACDF  x0.90
+A            0.02146   [ -0.00124,   0.0441]    0.15       BCDEF  x1.10
+AEF         -0.02005   [  -0.0427,  0.00264]    0.13       BCD  x0.91
+BC          -0.02001   [  -0.0427,  0.00268]    0.13       ADEF  x0.91
+ABC         -0.01637   [  -0.0391,  0.00632]    0.09       DEF  x0.93
+ACE          0.01554   [ -0.00716,   0.0382]    0.08       BDF  x1.07
+note: 31 effects are tested at 95%, so ~2 false positives are expected; judge importance by % variation, not by the star alone.
+6 of 31 effects significant; top 5 explain 97.2% of variation
