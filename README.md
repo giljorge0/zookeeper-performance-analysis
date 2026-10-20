@@ -1,7 +1,7 @@
 # Performance analysis of Apache ZooKeeper's write pipeline
 
 Software Performance Engineering, Instituto Superior Técnico — **Group 18**
-Gil Jorge (110062), João Palma (109242), Gabriel Petti Tavares (1120691)
+Gil Jorge (110062), João Palma (109242), Gabriel Petti Tavares (120691)
 
 ZooKeeper 3.9 is a coordination service in which reads are answered by any server but every write is serialized
 through one leader and needs a quorum. This repository measures where that write pipeline stops scaling.
