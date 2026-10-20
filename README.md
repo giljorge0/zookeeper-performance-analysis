@@ -50,9 +50,24 @@ Established with the data in this repository:
   delayed hop), median write latency 106 ms (about five hops), which matches the write pipeline.
 - **Leader failover:** ZooKeeper reports 211 ms (first run) and 216–235 ms (repetition) for the election phase.
 
-Stage II results (factorial effects, the single USL fit and its per-stage breakdown, eBPF measurements) are added to the
-report after the Compute Engine runs; the code that produces them is complete and validated on synthetic data and on a
-local Docker ensemble (see [Tests](#tests)).
+Stage II, on Google Compute Engine (client n2-standard-8, servers n2-standard-2, europe-west1-b):
+
+- **Factorial experiment** (2^(6-1), 2 replicates, 64 runs, 0 failed operations; `factorial/results_gce.csv`,
+  `factorial/analysis_gce_log10/`): on log10 (the ranges are 15x and 51x) the effects leave 2.1% / 1.3% of the variation
+  to the error. The write ratio explains 60% of the variation of throughput (10% -> 50% writes: x0.35; a write costs about
+  ten reads), the number of clients 26% of throughput (x1.98) and 94% of the write p99 (x11.7). Disabling `fsync` raises
+  throughput by 39% with 10 clients but lowers it by 17% with 160 (clients x forceSync); the log disk has no effect;
+  five servers are 14% faster than three.
+- **One USL curve** (3 servers, 30% writes, 13 client counts x 3 replicates; `usl/usl_single.csv`, `usl/out/`):
+  gamma = 2,082 ops/s, alpha = 0.0385 (95% CI 0.0345-0.0414); a coherency term is not supported (F-test p = 0.72), so
+  throughput levels off towards ~53,500 ops/s (46,436 measured at 160 clients); a fit on N <= 64 predicts the rest
+  within 4% on average.
+- **Per-stage counters** (`usl/mntr/`, `usl/out/stage_breakdown.csv`): from 1 to 160 clients the queue in front of the
+  leader's request-preparation thread grows from 0.02 to 1.37 ms, while the log-sync queue levels off at ~0.7 ms because
+  group commit grows to 17.6 requests per fsync.
+- **eBPF** (`ebpf_results_gce/`): an fsync takes ~1.0 ms on both pd-ssd and pd-balanced although the device is twice as
+  fast on pd-ssd; no fsync at all with forceSync=no; run-queue p99 < 0.5 ms; no TCP retransmissions; the leader's JVM uses
+  1.6-1.7 of its 2 cores, mostly for replication to the followers and client connections.
 
 ---
 

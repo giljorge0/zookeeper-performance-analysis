@@ -235,6 +235,7 @@ def summarize(d):
     return {
         "config": cfg,
         "fsync_calls": scalar(fs, "fsync_calls") or 0,
+        "fsync_mean_us": (scalar(fs, "fsync_total_us") / scalar(fs, "fsync_calls")) if scalar(fs, "fsync_calls") else None,
         "fsync_p50_us": pct(fb, 0.50), "fsync_p99_us": pct(fb, 0.99), "fsync_max_us": scalar(fs, "fsync_max_us"),
         "bio_scope": bio_scope, "bio_ios": sum(c for _, _, c in bio),
         "bio_p50_us": pct(bio, 0.50), "bio_p99_us": pct(bio, 0.99),
@@ -287,8 +288,8 @@ def main():
         label, d = spec.split("=", 1)
         res[label] = summarize(d)
 
-    os_cols = [("fsync_calls", "fsync calls", 0), ("fsync_p50_us", "fsync p50 ($\\mu$s)", 0),
-               ("fsync_p99_us", "fsync p99 ($\\mu$s)", 0), ("bio_p99_us", "log-disk I/O p99 ($\\mu$s)", 0),
+    os_cols = [("fsync_calls", "fsync calls", 0), ("fsync_mean_us", "fsync mean ($\\mu$s)", 0),
+               ("fsync_p99_us", "fsync p99 ($\\mu$s)", 0), ("bio_p99_us", "log disk p99 ($\\mu$s)", 0),
                ("runq_p99_us", "run queue p99 ($\\mu$s)", 0), ("tcp_retransmits", "TCP retr.", 0)]
     plain = [h.replace("$\\mu$", "u") for _, h, _ in os_cols]
     print(f"{'config':<22}" + "".join(f"{h:>24}" for h in plain))
@@ -315,8 +316,8 @@ def main():
         table(f"{base}.tex", ["Configuration"] + [h for _, h, _ in os_cols],
               [[nice_label(l, r)] + [fmt(r[k], nd) for k, _, nd in os_cols] for l, r in res.items()])
         table(f"{base}_zk.tex",
-              ["Configuration", "ops/s", "ops/s, no probes", "overhead (\\%)", "requests/fsync", "ZK fsync (ms)",
-               "until quorum ACK (ms)"],
+              ["Configuration", "ops/s", "no probes", "overhead (\\%)", "req./fsync", "ZK fsync (ms)",
+               "to quorum ACK (ms)"],
               [[nice_label(l, r), fmt(r["throughput"], 0), fmt(r["throughput_noprobe"], 0),
                 fmt(r["probe_overhead_pct"], 1), fmt(r["zk"].get("sync_processor_batch_size"), 1),
                 fmt(r["zk"].get("fsynctime"), 2), fmt(r["zk"].get("quorum_ack_latency"), 2)] for l, r in res.items()])

@@ -32,6 +32,9 @@ cp "$DT/effects_throughput_ops_sec.tex" "$DT/pareto_throughput_ops_sec.png" "$DT
    "$DT/residuals_throughput_ops_sec.png" "$DT/main_effects_throughput_ops_sec.png" report/
 cp "$DP/effects_write_p99_ms.tex" "$DP/pareto_write_p99_ms.png" "$DP/interactions_write_p99_ms.png" \
    "$DP/residuals_write_p99_ms.png" "$DP/main_effects_write_p99_ms.png" report/
+TF=(); [ "$LOG10_THROUGHPUT" = 1 ] && TF=(--log10)
+$PY factorial/plots.py --results "$RES" --meta "$META" --response throughput_ops_sec "${TF[@]}" --top 1 --outdir report \
+    >/dev/null                                 # the report shows only the strongest interaction (one panel)
 L=(); [ "$LOG10_P99" = 1 ] && L+=(--log10 write_p99_ms); [ "$LOG10_THROUGHPUT" = 1 ] && L+=(--log10 throughput_ops_sec)
 $PY factorial/effects_tex.py --dir factorial/analysis_gce --dir-log10 factorial/analysis_gce_log10 \
     --response throughput_ops_sec --response write_p99_ms "${L[@]}" --top 8 --out report/effects_combined.tex

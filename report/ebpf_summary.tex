@@ -1,0 +1,10 @@
+\begin{tabular}{@{}lrrrrrr@{}}
+\toprule
+Configuration & fsync calls & fsync mean ($\mu$s) & fsync p99 ($\mu$s) & log disk p99 ($\mu$s) & run queue p99 ($\mu$s) & TCP retr. \\
+\midrule
+fsync off, pd-balanced & 0 & -- & -- & 16384 & 511 & 0 \\
+fsync off, pd-ssd & 0 & -- & -- & 16384 & 511 & 0 \\
+fsync on, pd-balanced & 21393 & 1064 & 2048 & 1024 & 511 & 0 \\
+fsync on, pd-ssd & 23120 & 986 & 2048 & 512 & 511 & 0 \\
+\bottomrule
+\end{tabular}

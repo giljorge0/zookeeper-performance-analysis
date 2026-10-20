@@ -114,7 +114,7 @@ for name, text in FILES.items():
 
 r = summarize.summarize(run)
 checks = {
-    "fsync_calls": 1500, "fsync_p50_us": 1024, "fsync_p99_us": 4096, "fsync_max_us": 3900,
+    "fsync_calls": 1500, "fsync_mean_us": 900.0, "fsync_p50_us": 1024, "fsync_p99_us": 4096, "fsync_max_us": 3900,
     "bio_scope": "log disk (sdc)", "bio_ios": 155, "bio_p50_us": 1024, "bio_p99_us": 2048,
     "runq_events": 1000, "runq_p50_us": 1, "runq_p99_us": 15, "tcp_retransmits": 3, "tcp_resets_sent": 1,
     "probe_seconds": 40, "cpu_window_s": 30.0, "throughput": 9500.0, "throughput_noprobe": 10200.0,

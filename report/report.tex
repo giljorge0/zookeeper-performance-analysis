@@ -47,8 +47,12 @@ and five eBPF probes (fsync latency, block-I/O latency, run-queue latency, TCP r
 pipeline thread). We also correct two conclusions of our Stage I report: the
 Stage I load generator logged every operation, which throttled it and made the contention coefficient look
 independent of the number of servers, and the reported effect of network delay compared against the wrong
-baseline. \todo{one or two sentences with the main findings: which factors and interactions explain most of the
-variation, the fitted $\alpha$ (and $\beta$ if supported), and what the probes show about the log-sync stage.}
+baseline. Across the factorial experiment the share of writes explains 60\% of the variation of throughput (a write costs about
+as much as ten reads) and the number of clients 94\% of the variation of the write tail latency; disabling \texttt{fsync}
+raises throughput by 39\% at low load but lowers it by 17\% at high load, where the log-sync stage already writes 17
+requests per \texttt{fsync}. The scalability curve is described by contention alone ($\alpha=0.039$; a coherency term is
+not supported), and ZooKeeper's per-stage counters and the probes place that contention in the leader's request pipeline
+rather than in the disk.
 \end{abstract}
 
 \noindent\textbf{Git Commit Identifier:} \todo{output of \texttt{git rev-parse HEAD} on the GitLab remote after the final push}
@@ -386,7 +390,13 @@ and 4\,KiB payloads (E) cost 26\% ($\times0.74$, 5\%). The largest interaction i
 17{,}150 ops/s (geometric means), but with 160 clients throughput is \emph{lower} without it: 26{,}270 against 31{,}776 ops/s.
 At low load every write waits for its own \texttt{fsync}; at high load the log-sync stage writes many requests per
 \texttt{fsync} (group commit), so the \texttt{fsync} no longer limits throughput, and
-\todo{eBPF/mntr evidence for the high-load reversal: requests per flush and CPU of the leader's threads with and without fsync}.
+once the servers are saturated, throughput is set by the CPU each request costs. The probe runs
+(Section~\ref{sec:ebpf}) show the batching directly: with the \texttt{fsync} the log-sync stage writes 16--17 requests per
+flush, without it 1.9. We read the reversal as the price of losing that batching at saturation: more, smaller flushes and
+acknowledgment rounds cost the leader more CPU per request. The probes ran at 80 clients, where disabling the
+\texttt{fsync} still gains 8--10\%, so they show the batching but not the reversal itself; the explanation is consistent
+with the data rather than proven by it. The reversal itself is robust: at 160 clients, throughput without \texttt{fsync} is
+0.79--0.87 of that with it at every level of every other factor.
 A larger ensemble raises throughput by 14\% ($\times1.14$) at both write ratios: the extra servers answer reads, and the
 larger quorum costs less than they add, even with 50\% writes. The log disk (F) has no main effect and appears only in a
 small E$\times$F interaction (0.5\%).
@@ -443,7 +453,17 @@ The fit minimizes the relative error, so that a 3\% error counts the same at 600
 bootstrap over the replicates; the full model is compared with the contention-only (Amdahl) model by AIC and an F-test, so that
 $\beta$ is claimed only if the data justify the extra parameter; and a fit on the lower loads is used to predict the highest ones.
 
-\IfFileExists{usl_text.tex}{\input{usl_text.tex}}{\todo{run usl/usl\_single\_fit.py and usl/make\_usl\_tex.py; this paragraph is generated from the fit}}
+% src: usl/usl_single.csv, usl/usl_client_cpu.csv, usl/out/fit_summary.txt (usl/usl_single_fit.py)
+All 39 runs completed without errors, the replicates of a load level differed by at most 12\%, and the load generator
+stayed below 28\% CPU. Throughput rises from 2{,}165 ops/s with one client to 46{,}436 ops/s with 160 (Fig.~\ref{fig:usl}).
+The fitted single-client throughput is $\gamma=2{,}082$ ops/s (95\% bootstrap interval 1{,}996--2{,}169) and the contention
+coefficient $\alpha=0.0385$ (0.0345--0.0414). A coherency term is not supported: the contention-only (Amdahl) model fits as
+well (AIC $-241.4$ against $-239.5$ for the full USL; F-test $p=0.72$; 37\% of the bootstrap fits put $\beta$ at zero), so we
+report $\alpha$ only and do not claim retrograde scaling; the peak the full USL would put at $N_{\max}\approx469$ lies far
+outside the tested range and has no meaning here. With the Amdahl fit ($\alpha=0.039$) the speed-up over one client is
+bounded by $1/\alpha\approx26$ and throughput by $\gamma/\alpha\approx53{,}500$ ops/s; at 160 clients the ensemble delivers
+87\% of that bound. The model predicts as well as it fits: fitted to $N\le64$ only, it predicts the throughput at 96, 128
+and 160 clients within 1.9--5.1\% (mean 4.0\%).
 
 \begin{figure}[t]
   \centering
@@ -461,8 +481,13 @@ request-preparation thread, waiting for the log-sync thread, until its batch was
 acknowledged it, and the number of requests written per \texttt{fsync} (all levels: Fig.~\ref{fig:stages} in the
 appendix). A stage whose waiting time grows with $N$ while the others stay flat is the serialized stage behind $\alpha$;
 a growing batch shows group commit amortizing the \texttt{fsync} as the load rises.
-\todo{interpretation with the numbers: which stage's queueing grows with $N$, how much of the time until the quorum ACK is the
-\texttt{fsync}, how the batch grows, and whether that matches $\alpha$ (and $\beta$).}
+From 1 to 160 clients the server-side write latency grows from 0.87 to 5.57\,ms. The largest single
+contribution is the queue in front of the request-preparation thread, which grows from 0.02 to 1.37\,ms, most of it
+beyond 64 clients; the time from the creation of a transaction until a quorum has acknowledged it grows from 0.72 to
+2.79\,ms, and the commit stage adds about 0.8\,ms at 160 clients. The log-sync stage, in contrast, stops growing: its queue
+levels off at about 0.7\,ms because group commit grows from 1 to 17.6 requests per \texttt{fsync}, so each write pays
+only a small share of an \texttt{fsync}. The serialized work behind $\alpha$ is therefore the leader's request pipeline
+(zxid assignment, proposal to the followers, commit), not the disk.
 
 \begin{table}[t]
   \centering
@@ -512,8 +537,8 @@ run), and ZooKeeper's counters are read around it (Table~\ref{tab:ebpfzk}).
 
 \begin{table}[t]
   \centering
-  \caption{The same runs seen by ZooKeeper and by the thread probe: throughput with and without the probes, requests written
-    per \texttt{fsync}, ZooKeeper's own \texttt{fsync} time and time until a quorum ACK (leader means over the run), and the CPU
+  \caption{The same runs seen by ZooKeeper and by the thread probe: throughput with the probes and without them (mean of
+    the runs before and after), requests written per \texttt{fsync} (per flush when it is off), ZooKeeper's own \texttt{fsync} time and time until a quorum ACK (leader means over the run), and the CPU
     (in cores) used by the busiest pipeline threads of the leader.}
   \label{tab:ebpfzk}
   \footnotesize
@@ -521,9 +546,21 @@ run), and ZooKeeper's counters are read around it (Table~\ref{tab:ebpfzk}).
   \IfFileExists{ebpf_summary_threads.tex}{\input{ebpf_summary_threads.tex}}{\todo{ebpf/summarize.py: ebpf\_summary\_threads.tex}}
 \end{table}
 
-\todo{Interpretation. What fraction of the write latency is the fsync (compare its p50 with the benchmark's write latency)? Does the
-fsync latency change with the disk type as the block-I/O histogram predicts? Is the run queue empty? Are there retransmissions?
-State which of H1--H4 these results support.}
+% src: ebpf_results_gce/*/ (gce/run_ebpf_experiment.sh), ebpf_results_gce/summary.json (ebpf/summarize.py)
+With \texttt{forceSync=no} the probe sees no \texttt{fsync} at all, which confirms that factor D was applied. With it, an
+\texttt{fsync} of the transaction log takes 1.0\,ms on average on both disks (986\,$\mu$s on pd-ssd, 1{,}064\,$\mu$s on
+pd-balanced; most calls take 1--2\,ms), although the device itself is about twice as fast on pd-ssd (I/O p99 below 0.5
+against 1\,ms): the device is not what makes the \texttt{fsync} slow, which is why the log disk has no effect in the
+factorial experiment. ZooKeeper's own counter reports 0.70--0.77\,ms for the same calls because it truncates each one to
+whole milliseconds. Removing the \texttt{fsync} shortens the time until a quorum ACK from 2.5 to 1.15\,ms and the median
+write from 4.8 to 3.8--3.95\,ms: at this load the \texttt{fsync} is about a fifth of a write's latency. The run queue of the
+JVM's threads stays below 0.5\,ms at the 99th percentile and there are no TCP retransmissions, so neither CPU starvation
+nor packet loss adds delay. The leader's JVM uses 1.6--1.7 of its two cores; the largest shares go to replication to the
+followers (0.55--0.67 cores) and to client connections (0.4), while the request-preparation and log-sync threads use only
+0.2--0.25 and 0.1 cores. No single thread is saturated, so at this load the limit is the leader's CPU as a whole rather
+than one stage's thread. The probes' overhead is within the variation between runs: the two runs without probes of the
+same configuration differed by up to 30\%. These results support H1 at moderate load (the \texttt{fsync} is on the write
+path and costs about 1\,ms) and explain why H3 fails (the device is not the slow part of the \texttt{fsync}).
 
 \subsection{Cross-check with YCSB}
 
@@ -608,37 +645,56 @@ is measured separately, as factor A of the factorial experiment, and appears in 
   \caption{USL terms (and the ensemble size), the pipeline stage each one points to, the evidence of this work and a mitigation.}
   \label{tab:limits}
   \footnotesize
-  \begin{tabular}{@{}p{1.1cm}p{3.5cm}p{3.4cm}p{3.7cm}@{}}
+  \begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}p{1.25cm}*{3}{>{\raggedright\arraybackslash}X}@{}}
     \toprule
     Term & Pipeline stage & Evidence & Mitigation \\
     \midrule
     $\alpha$ & Serialized stages of the leader: request preparation (one thread assigns every zxid), the log-sync stage (one
       thread appends and \texttt{fsync}s, a batch at a time) and the commit stage
-      & \todo{CPU of these threads (thread probe); growth of their queueing with $N$ (Table~\ref{tab:stages}); effect of D and F}
-      & Faster, dedicated log device; larger group-commit batches; fewer, larger writes by the clients (multi-operations) \\
+      & $\alpha=0.039$; the prep-queue time grows from 0.02 to 1.37\,ms (Table~\ref{tab:stages}); the leader's JVM uses 1.6--1.7
+of its 2 cores, mostly replication and client I/O (Table~\ref{tab:ebpfzk}); D and F have no main effect on throughput
+      & More CPU for the leader, or less work on it (\texttt{leaderServes=no}); fewer, larger writes by the clients
+        (multi-operations); not a faster log disk \\
     $\beta$ & Interference between concurrent requests that grows with pairs of clients: in the commit stage a committed write
       waits for the reads in progress; per-session work on the servers; garbage collection
-      & \todo{whether AIC and the F-test support $\beta$; commit-stage times against $N$}
+      & Not supported (AIC; F-test $p=0.72$); the commit-stage time grows only linearly, to about 0.8\,ms at 160 clients
       & Fewer, longer-lived sessions; separate read and write clients; \emph{observers} to take reads off the voting servers \\
     $\gamma$ & Cost of one request in isolation: network round trips (forward, proposal, acknowledgment, commit), serialization,
       payload bytes, the \texttt{fsync} of a single write
-      & \todo{effect of E; one-client latencies; time until quorum ACK at $N=1$}
+      & $\gamma=2{,}082$ ops/s, i.e.\ 0.48\,ms per request for one client; 4\,KiB payloads cost 26\% of throughput (E); 0.72\,ms
+until quorum ACK at $N=1$
       & Asynchronous clients that pipeline several requests per session; smaller payloads \\
     Servers (factor A) & Quorum size: each proposal goes to every follower and the leader waits for a majority
-      & \todo{effect of A and A$\times$B; TCP probe}
+      & Five servers are 14\% faster ($\times1.14$) at both write ratios; with 10\% writes their write p99 is higher
+(A$\times$B); no TCP retransmissions
       & Keep the voting ensemble small; observers to scale reads without enlarging the quorum; hierarchical quorums \\
     \bottomrule
-  \end{tabular}
+  \end{tabularx}
 \end{table}
 
-\todo{One paragraph that names the stage that dominates in the measurements, with the numbers, and states which mitigation the data support.
-If forceSync (D) has no effect, the log-sync stage is not the bottleneck: look at the leader's CPU (thread and run-queue probes) and at the request-preparation stage.}
+The measurements point to one dominant limit, and it is not the disk: the log disk has no effect, an \texttt{fsync}
+costs about 1\,ms whatever the device, and group commit spreads it over up to 17 requests, so the log-sync stage's queue
+stops growing beyond about 64 clients. What keeps growing is the queueing in front of the leader's request pipeline, and
+the leader's CPU is mostly busy replicating to the followers and serving client connections; the contention coefficient
+$\alpha=0.039$ is the share of each request that passes through this serialized path. The mitigations the data support are
+therefore those that relieve the leader rather than the disk: more CPU for the leader, or less work on it, since the
+leader can be configured not to accept clients and to focus on coordination (\texttt{leaderServes=no})~\cite{zookeeper_admin};
+observers to add read capacity without enlarging the quorum (more servers already raised throughput by 14\%); and fewer,
+larger writes from the clients (multi-operations), which amortize the per-request replication work the way group commit
+amortizes the \texttt{fsync}. A faster log disk would not help, and disabling the \texttt{fsync} lowers throughput at high
+load.
 
 \section{Conclusion}
 
-\todo{Main insights, one paragraph each: (1) the factors and interactions that matter most and the share of variation they explain; (2) the
-fitted USL, whether $\beta$ is justified, and the stage that $\alpha$ points to; (3) what the probes confirmed or refuted.}
-Two methodological lessons are already clear. First, a load generator must be validated before its numbers are interpreted: in Stage I a client that
+\emph{Insights.} (1) The workload, more than the configuration, decides ZooKeeper's throughput: the share of writes
+explains 60\% of its variation and the load 26\%, while the log disk and \texttt{fsync} explain almost nothing on average;
+for the write tail latency the load explains 94\%. (2) The scalability curve of one configuration is described by
+contention alone ($\alpha=0.039$, $\gamma=2{,}082$ ops/s; a coherency term is not supported up to 160 clients): throughput
+levels off towards about 53{,}500 ops/s instead of falling, and a fit on up to 64 clients predicts the higher loads within
+5\%. (3) ZooKeeper's per-stage counters and the probes locate the contention in the leader's request pipeline and its CPU,
+not in the disk: an \texttt{fsync} costs about 1\,ms on either disk and group commit amortizes it over up to 17 requests,
+which is also why disabling it helps only at low load and costs 17\% of throughput at high load.
+Two methodological lessons stand out as well. First, a load generator must be validated before its numbers are interpreted: in Stage I a client that
 logged every operation produced a contention coefficient that looked like a property of ZooKeeper and was not, and the check that exposed it was
 counting the lines of output of the client. Second, on shared hardware a single run per point cannot separate an effect from drift (identical runs
 differed by up to a factor of two), so every conclusion in this report rests on replicated, randomized runs on dedicated machines.
