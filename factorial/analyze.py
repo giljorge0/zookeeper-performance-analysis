@@ -159,8 +159,8 @@ def write_outputs(res, outdir, resp, names, log10, topk):
     plt.figure(figsize=(5.2, 3.6))
     plt.barh([e["label"] + ("" if e["sig"] else " (n.s.)") for e in reversed(top)],
              [e["pct"] for e in reversed(top)], color=["tab:blue" if e["sig"] else "lightgray" for e in reversed(top)])
-    plt.xlabel("% of total variation" + (" (log10 of the response)" if log10 else ""))
-    plt.title(f"Allocation of variation: {label(resp)}")
+    plt.xlabel("% of variation" + (" (log10)" if log10 else ""))
+    plt.title(f"Share of variation: {label(resp).split(' (')[0]}")
     plt.tight_layout()
     plt.savefig(os.path.join(outdir, f"pareto_{resp}.png"), dpi=170)
     plt.close()

@@ -59,7 +59,7 @@ ZooKeeper keeps a tree of small data nodes (znodes) in memory. Clients read and 
 
     \node[box, below=8mm of rc] (wc) {Client};
     \node[box, right=of wc] (wf) {Follower\\forwards};
-    \node[box, right=of wf] (wl) {Leader\\assigns zxid,\\PROPOSAL};
+    \node[box, right=of wf] (wl) {Leader: zxid,\\logs + \texttt{fsync},\\PROPOSAL};
     \node[box, right=of wl] (wa) {Every follower\\logs + \texttt{fsync},\\ACK};
     \node[box, right=of wa] (wq) {Leader: majority\\of ACKs $\Rightarrow$\\COMMIT};
     \node[box, right=of wq] (wr) {Server applies,\\replies};
@@ -128,7 +128,7 @@ In Stage I the same configuration (3 servers, 20 clients, 30\% writes) gave 6{,}
   \input{design_factors.tex}
 \end{table}
 
-\paragraph{Design.} We use the half fraction $2^{6-1}$ with $F=ABCDE$ (defining relation $I=ABCDEF$)~\cite{jain_book}. It has resolution VI: main effects are aliased with five-factor interactions and two-factor interactions with four-factor ones, so all six main effects and fifteen two-factor interactions are estimated from 32 runs per replicate if interactions of order four and higher are negligible. A quarter fraction would have resolution IV and alias two-factor interactions in pairs, which is exactly what three of our hypotheses (H2--H4, listed below) are about. Table~\ref{tab:sign} is the sign table: the full $2^5$ table of A--E with $F$ as the product of the other five columns. Two replicates give 64 runs and 32 degrees of freedom for error, which is what the credit allowed. With the measured error this gives intervals of $\pm0.015$ on each $\log_{10}$ effect, so a change of about 7\% between levels is detectable.
+\paragraph{Design.} We use the half fraction $2^{6-1}$ with $F=ABCDE$ (defining relation $I=ABCDEF$)~\cite{jain_book}. It has resolution VI: main effects are aliased with five-factor interactions and two-factor interactions with four-factor ones, so all six main effects and fifteen two-factor interactions are estimated from 32 runs per replicate if interactions of order four and higher are negligible. Like any $2^k$ design, this assumes each factor's effect points the same way across its range. A quarter fraction would have resolution IV and alias two-factor interactions in pairs, which is exactly what three of our hypotheses (H2--H4, listed below) are about. Table~\ref{tab:sign} is the sign table: the full $2^5$ table of A--E with $F$ as the product of the other five columns. Two replicates give 64 runs and 32 degrees of freedom for error, which is what the credit allowed. With the measured error this gives intervals of $\pm0.015$ on each $\log_{10}$ effect, so a change of about 7\% between levels is detectable.
 
 \begin{table}[t]
   \centering
@@ -178,7 +178,7 @@ Five servers raise throughput by 14\% ($\times1.14$, 1\% of the variation), and 
 
 \paragraph{Pooled against whole-plot error.} The whole-plot intervals are narrower than the pooled ones, so rebuilding the servers added no detectable variance. None of the four whole-plot interactions is detectable, D$\times$F included. With only 7 degrees of freedom, we call an effect that is significant in just one of the two tests borderline.
 
-\paragraph{Hypotheses.} \textbf{H1} holds only at 10 clients. The main effect of D on throughput ($\times1.07$) is borderline and much smaller than C$\times$D, which changes its sign, and D lowers the write p99 by 18\%. \textbf{H2} is rejected (B$\times$D, $\times1.04$, not significant). \textbf{H3} is rejected too, because neither F nor D$\times$F is detectable. The two disks turned out to have almost the same latency (Section~\ref{sec:ebpf}), so the levels were too close to test it. \textbf{H4} is rejected for throughput, since five servers are faster, and holds in part for the p99, which five servers raise with 10\% writes but not with 50\% (A$\times$B, $\times0.85$). \textbf{H5} is rejected for throughput, where the write ratio matters more, and holds for the write p99.
+\paragraph{Hypotheses.} \textbf{H1} holds only at 10 clients. The main effect of D on throughput ($\times1.07$) is borderline and much smaller than C$\times$D, which changes its sign, and D lowers the write p99 by 18\%. \textbf{H2} is not supported: B$\times$D ($\times1.04$) is not detected. \textbf{H3} could not be tested: neither F nor D$\times$F is detected, but the two disks turned out to have almost the same latency (Section~\ref{sec:ebpf}), so the levels were too close. \textbf{H4} is rejected for throughput, since five servers are faster, and holds in part for the p99, which five servers raise with 10\% writes but not with 50\% (A$\times$B, $\times0.85$). \textbf{H5} is rejected for throughput, where the write ratio matters more, and holds for the write p99.
 
 \begin{figure}[t]
   \centering
@@ -280,7 +280,7 @@ Four probes are our own bpftrace programs~\cite{gregg_bpf} and one is bcc's \tex
 
 \paragraph{Leader CPU.} No other thread comes close to a full core, which leaves the leader's CPU as a whole. The Amdahl fit caps throughput at $\lambda/\sigma\approx53{,}500$ ops/s, so the bottleneck needs $D=\sigma/\lambda\approx18.7\,\mu$s per operation. If that bottleneck is the leader's two vCPUs ($U=XD/2$), each operation needs $37\,\mu$s of CPU. The thread probe measures this directly along the curve: 40.4\,$\mu$s at 64 clients and 38.3\,$\mu$s at 160, at a utilization of 0.76--0.85. At low load fixed background work, such as heartbeats, raises the CPU per operation (285\,$\mu$s at one client), so the comparison holds only near saturation.
 
-\paragraph{Two vCPUs and the 50\% curve.} Two vCPUs act like one serial server of twice the speed, so $\sigma=\lambda D_{\mathrm{CPU}}/2$. At 50\% writes the match is looser. The noisier 80-client runs give about 60\,$\mu$s per operation against 52\,$\mu$s from the fit, and their CPU cap of 33{,}000 ops/s is below the fit's asymptote of 38{,}200; the curve itself reaches 33{,}418 at 160 clients. From 30 to 50\% writes the CPU per operation grows about 1.5 times and the single-client time $1/\lambda$ about 1.46 times, so $\sigma$ hardly changes, as the bootstrap found.
+\paragraph{Two vCPUs and the 50\% curve.} At the asymptote, two vCPUs act like one serial server of twice the speed, so $\sigma=\lambda D_{\mathrm{CPU}}/2$. At 50\% writes the match is looser. The noisier 80-client runs give about 60\,$\mu$s per operation against 52\,$\mu$s from the fit, and their CPU cap of 33{,}000 ops/s is below the fit's asymptote of 38{,}200; the curve itself reaches 33{,}418 at 160 clients. From 30 to 50\% writes the CPU per operation grows about 1.5 times and the single-client time $1/\lambda$ about 1.46 times, so $\sigma$ hardly changes, as the bootstrap found.
 
 \paragraph{Mitigations.} To relieve the leader's CPU: a larger machine for it, \texttt{leader\-Serves=no}~\cite{zookeeper_admin}, observers for reads, and multi-operations. A faster log disk would not help, and turning \texttt{fsync} off costs throughput at high load as well as durability.
 
