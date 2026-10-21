@@ -9,13 +9,15 @@ The report is [`report/report.pdf`](report/report.pdf) (source `report/report.te
 
 ## Main results (Stage II, Compute Engine)
 
-- **Factorial experiment** (2^(6-1), 6 factors, 64 runs): the share of writes explains 60% of the variation of
-  throughput and the number of clients 94% of the write p99. Disabling `fsync` helps at 10 clients (+39%) but costs 17%
-  at 160; the log disk type has no effect.
-- **USL curve** (3 servers, 1-160 clients): contention only, alpha = 0.039; no coherency term. Throughput levels off
-  towards ~53,500 ops/s.
-- **Where the time goes** (ZooKeeper's counters and five eBPF probes): the leader's request pipeline and CPU, not the
-  disk. An fsync costs ~1 ms on either disk and group commit spreads it over up to 17 requests.
+- **Factorial experiment** (2^(6-1), 6 factors, 2 replicates, 64 runs): the share of writes explains 60% of the
+  variation of throughput and the number of clients 94% of the write p99. Disabling `fsync` helps at 10 clients (+39%)
+  but costs 17% at 160; the log disk type has no effect (the two disks have the same fsync latency).
+- **USL curves** (3 servers, 1-160 clients, at 0, 30 and 50% writes): with writes the curves need only contention
+  (sigma ~ 0.038, no crosstalk term) and more writes lower the single-client throughput, not sigma. At 30% writes
+  throughput levels off towards ~53,500 ops/s.
+- **Where the time goes** (ZooKeeper's counters and five eBPF probes): the leader's CPU near saturation uses
+  38-40 us per operation, matching the 37 us bottleneck demand the fit implies. The disk is not the bottleneck: an fsync
+  costs ~1 ms on either disk and group commit spreads it over up to 18 requests.
 
 ## Repository structure
 
@@ -27,10 +29,13 @@ data/                          Stage I measurements (CSV)
 usl_plots*/, ycsb_results/     Stage I fits and YCSB results
 docs/                          Stage I pipeline write-up, ZooKeeper setup guide, reproduction details
 factorial/                     Stage II 2^(6-1) experiment: design, runner, analysis, plan and results (results_gce.csv)
-usl/                           Stage II USL sweep, fit, per-stage breakdown and its data (usl_single.csv, mntr/)
+usl/                           Stage II USL sweeps, fits, curve comparison, per-stage breakdown and their data
+                               (usl_single.csv = 30% writes, usl_wr00.csv / usl_wr05.csv = 0% / 50%, mntr*/)
 gce/                           Compute Engine: VM creation, ensemble configuration, the job runner (vm_jobs.sh)
 ebpf/                          the five eBPF probes and their summarizer
-ebpf_results_gce/              raw probe runs, one folder per configuration
+ebpf_results_gce/              raw probe runs at 80 clients, one folder per forceSync x log disk configuration
+ebpf_curve/                    raw probe runs along the 30% USL curve (1, 16, 64, 160 clients)
+fio_results/                   fio fsync test of the two log disks
 report/                        the report (LNCS), its generated tables and figures, make_artifacts.sh
 ```
 
@@ -55,7 +60,7 @@ On a Google Cloud project with billing and 18 vCPUs of quota (about US$1/hour wh
 ```bash
 BOOT_DISK_TYPE=pd-standard MAX_RUN_DURATION=5h ./gce/create_infra.sh     # laptop: client VM + 5 servers
 # copy the repository and the ssh key to the client VM, then on it:
-bash gce/vm_jobs.sh smoke        # then factorial, usl, ebpf, facts, pack (inside tmux)
+bash gce/vm_jobs.sh smoke        # then factorial, usl, usl_wr, ebpf, ebpf_curve, fio, facts, pack (inside tmux)
 ./report/make_artifacts.sh       # laptop, after copying results.tgz back: every table and figure of the report
 ./gce/delete_infra.sh            # laptop: stop all spending
 ```
