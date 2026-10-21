@@ -20,8 +20,6 @@
 \setcounter{topnumber}{3}
 \setcounter{totalnumber}{4}
 
-% Everything that still needs a measurement or a decision is marked with \todo (red). Search for TODO before submitting.
-\newcommand{\todo}[1]{\textbf{\textcolor{red}{[TODO: #1]}}}
 
 \begin{document}
 
@@ -134,7 +132,7 @@ limits scalability and which of the cost terms of the USL it corresponds to.
 \label{sec:corrections}
 
 \paragraph{The load generator logged every operation.}
-% src: results_java_noisy.csv, results_java_v2.csv, gap_diagnosis.csv
+% src: data/results_java_noisy.csv, data/results_java_v2.csv, data/gap_diagnosis.csv
 The same configuration (3 servers, 20 clients, 30\% writes) reached 6{,}364 ops/s in the Stage I sweep but
 14{,}832 ops/s when the sweep was repeated with a quiet client. A controlled comparison showed that the jar used for the
 sweep printed about 145{,}000 lines in a 15\,s run, roughly one per operation: the shaded jar contained Logback, whose
@@ -150,7 +148,7 @@ likely an artifact of the client. With the quiet client the fitted $\alpha$ was 
 servers, and the standalone server no longer saturated within 80 clients (29{,}000 ops/s).
 
 \paragraph{Run-to-run variation on a laptop is large.}
-% src: gap_diagnosis.csv
+% src: data/gap_diagnosis.csv
 In the same comparison, repetitions of an identical variant differed by up to a factor of two (6{,}285 against
 12{,}043 ops/s), more than any difference between the variants. The Stage I
 sweep used one run per point in order of increasing load, so drift and load were confounded, and the differences between
@@ -287,7 +285,7 @@ general.
   \caption{Factors, levels and justification. ``Hard'' factors require reconfiguring the group of servers.}
   \label{tab:factors}
   \footnotesize
-  \IfFileExists{design_factors.tex}{\input{design_factors.tex}}{\todo{run factorial/make\_tex.py}}
+  \input{design_factors.tex}
 \end{table}
 
 \subsection{Design}
@@ -315,7 +313,7 @@ before the first run and is part of the repository.
   \caption{Alias structure ($I=ABCDEF$, resolution VI): main effects and two-factor interactions.}
   \label{tab:alias}
   \footnotesize
-  \IfFileExists{design_alias.tex}{\input{design_alias.tex}}{\todo{run factorial/make\_tex.py}}
+  \input{design_alias.tex}
 \end{table}
 
 \paragraph{Restricted randomization.} Number of servers, \texttt{forceSync} and log disk require restarting and reconfiguring the
@@ -416,14 +414,14 @@ p99: with 10\% writes five servers raise it from 7.4 to 9.6\,ms, with 50\% write
     low to the high level. $^\dagger$: the interval includes zero.}
   \label{tab:effects}
   \footnotesize
-  \IfFileExists{effects_combined.tex}{\input{effects_combined.tex}}{\todo{run report/make\_artifacts.sh}}
+  \input{effects_combined.tex}
 \end{table}
 
 \begin{figure}[t]
   \centering
-  \IfFileExists{pareto_throughput_ops_sec.png}{\includegraphics[height=4.6cm]{pareto_throughput_ops_sec.png}}{\todo{pareto plot}}
+  \includegraphics[height=4.6cm]{pareto_throughput_ops_sec.png}
   \hfill
-  \IfFileExists{interactions_throughput_ops_sec.png}{\includegraphics[height=4.6cm]{interactions_throughput_ops_sec.png}}{}
+  \includegraphics[height=4.6cm]{interactions_throughput_ops_sec.png}
   \caption{Left: share of the variation of $\log_{10}$ throughput explained by each effect (n.s.: not significant).
     Right: the strongest interaction, clients $\times$ \texttt{forceSync}: the lines cross.}
   \label{fig:pareto}
@@ -458,7 +456,7 @@ and 160 clients within 1.9--5.1\% (mean 4.0\%).
 
 \begin{figure}[t]
   \centering
-  \IfFileExists{usl_single_fit.png}{\includegraphics[width=0.8\textwidth]{usl_single_fit.png}}{\todo{usl\_single\_fit.png}}
+  \includegraphics[width=0.8\textwidth]{usl_single_fit.png}
   \caption{Measured throughput (dots: runs; black: mean $\pm$ one standard deviation), the USL fit with its 95\% bootstrap band and
     the contention-only (Amdahl) model. The shaded region on the right was held out for the validation.}
   \label{fig:usl}
@@ -487,7 +485,7 @@ only a small share of an \texttt{fsync}. The serialized work behind $\alpha$ is 
     ZooKeeper's own counters (1\,ms resolution).}
   \label{tab:stages}
   \footnotesize
-  \IfFileExists{stage_breakdown.tex}{\input{stage_breakdown.tex}}{\todo{usl/stage\_breakdown.py --tex report/stage\_breakdown.tex}}
+  \input{stage_breakdown.tex}
 \end{table}
 
 \subsection{eBPF probes}
@@ -523,7 +521,7 @@ run), and ZooKeeper's counters are read around it (Table~\ref{tab:ebpfzk}).
     percentiles are upper bounds of log$_2$ histogram buckets.}
   \label{tab:ebpf}
   \footnotesize
-  \IfFileExists{ebpf_summary.tex}{\input{ebpf_summary.tex}}{\todo{run ebpf/summarize.py --tex report/ebpf\_summary.tex}}
+  \input{ebpf_summary.tex}
 \end{table}
 
 \begin{table}[t]
@@ -533,8 +531,8 @@ run), and ZooKeeper's counters are read around it (Table~\ref{tab:ebpfzk}).
     (in cores) used by the busiest pipeline threads of the leader.}
   \label{tab:ebpfzk}
   \footnotesize
-  \IfFileExists{ebpf_summary_zk.tex}{\input{ebpf_summary_zk.tex}}{\todo{ebpf/summarize.py: ebpf\_summary\_zk.tex}}\\[4pt]
-  \IfFileExists{ebpf_summary_threads.tex}{\input{ebpf_summary_threads.tex}}{\todo{ebpf/summarize.py: ebpf\_summary\_threads.tex}}
+  \input{ebpf_summary_zk.tex}\\[4pt]
+  \input{ebpf_summary_threads.tex}
 \end{table}
 
 % src: ebpf_results_gce/*/ (gce/run_ebpf_experiment.sh), ebpf_results_gce/summary.json (ebpf/summarize.py)
@@ -703,14 +701,14 @@ deletes, watches or multi-operations. Natural next steps are observers, asynchro
   \centering
   \scriptsize
   \caption{Sign table of the $2^{6-1}$ design (run $\times$ factor, $\pm1$) with the mean throughput of the two replicates.}
-  \IfFileExists{design_signtable.tex}{\input{design_signtable.tex}}{\todo{run factorial/make\_tex.py --results}}
+  \input{design_signtable.tex}
 \end{table}
 
 \section{Per-stage times at every load level}
 \label{app:stages}
 \begin{figure}[h]
   \centering
-  \IfFileExists{stage_breakdown.png}{\includegraphics[width=\textwidth]{stage_breakdown.png}}{\todo{copy usl/out/stage\_breakdown.png to report/}}
+  \includegraphics[width=\textwidth]{stage_breakdown.png}
   \caption{Time per pipeline stage (left) and requests written per \texttt{fsync} (right) against the number of clients, for
     every load level of the USL curve: leader means per run, averaged over the replicates (the server-side write latency is
     pooled over all servers).}
@@ -721,8 +719,8 @@ deletes, watches or multi-operations. Natural next steps are observers, asynchro
 \label{app:residuals}
 \begin{figure}[h]
   \centering
-  \IfFileExists{residuals_throughput_ops_sec.png}{\includegraphics[width=0.9\textwidth]{residuals_throughput_ops_sec.png}}{\todo{run report/make\_artifacts.sh}}\\
-  \IfFileExists{residuals_write_p99_ms.png}{\includegraphics[width=0.9\textwidth]{residuals_write_p99_ms.png}}{}
+  \includegraphics[width=0.9\textwidth]{residuals_throughput_ops_sec.png}\\
+  \includegraphics[width=0.9\textwidth]{residuals_write_p99_ms.png}
   \caption{Residuals of the effects model of the factorial experiment against the predicted value (left) and on a normal
     quantile plot (right): throughput (top) and 99th-percentile write latency (bottom), in the model used in
     Table~\ref{tab:effects}.}
