@@ -103,7 +103,8 @@ def main():
         import matplotlib
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
-        plt.figure(figsize=(6.4, 3.8))
+        plt.rcParams.update({"font.size": 13})
+        plt.figure(figsize=(6.0, 3.9))
         grid = np.linspace(1, 170, 300)
         for i, r in enumerate(rows):
             d, f, c = r["d"], r["f"], f"C{i}"
@@ -117,7 +118,7 @@ def main():
         plt.ylabel("throughput (ops/s)")
         plt.ylim(bottom=0)
         plt.grid(alpha=0.3)
-        plt.legend(fontsize=8)
+        plt.legend(fontsize=12)
         plt.tight_layout()
         plt.savefig(a.png, dpi=200)
         print("wrote", a.png)
