@@ -111,6 +111,9 @@ Then, on the client VM, one job after the other (each ends with `JOB <name> FINI
 | `tmux new -d -s factorial 'bash gce/vm_jobs.sh factorial 2>&1 \| tee -a ~/factorial.log'` | the 64 runs of `factorial/plan_gce/plan.csv` (8 as a check first; resumes if interrupted), then the analysis | ~45 min |
 | `tmux new -d -s usl 'bash gce/vm_jobs.sh usl 2>&1 \| tee -a ~/usl.log'` | the USL curve (13 client counts × 3 replicates, random order, client CPU and `mntr` per run), the fit, the per-stage breakdown | ~30 min |
 | `tmux new -d -s ebpf 'bash gce/vm_jobs.sh ebpf 2>&1 \| tee -a ~/ebpf.log'` | the five probes on the leader for forceSync × log disk (80 clients, 50 % writes), with an overhead baseline | ~12 min |
+| `WRS="0.5 0.0" bash gce/vm_jobs.sh usl_wr` | the extra USL curves at 50 % and 0 % writes (output `usl/usl_wr05.csv`, `usl/usl_wr00.csv`, `usl/mntr_wr*/`, with mid-run session snapshots) | ~30 min each |
+| `bash gce/vm_jobs.sh ebpf_curve` | the probes along the 30 % curve at 1, 16, 64 and 160 clients (`ebpf_curve/n*/`) | ~12 min |
+| `bash gce/vm_jobs.sh fio` | `fio` fsync test of both log disks on one idle server (`fio_results/`) | ~3 min |
 | `bash gce/vm_jobs.sh facts` | versions, CPUs, memory and disks of every VM -> `gce/testbed_facts.txt` | 1 min |
 | `bash gce/vm_jobs.sh pack` | results and logs -> `~/results.tgz` | |
 
