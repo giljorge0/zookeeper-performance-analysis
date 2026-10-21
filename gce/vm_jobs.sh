@@ -20,7 +20,7 @@ JOPTS="-Xms1g -Xmx2g"
 up() {  # up <n> <ssd|balanced> <yes|no>  -> prints the connect string
   python3 gce/gce_backend.py up --group z1 --n "$1" --log-disk "$2" --force-sync "$3" | tee /dev/stderr | sed -n 's/^HOSTS=//p'
 }
-job="${1:?job: smoke|factorial|usl|ebpf|facts|pack}"; rc=0
+job="${1:?job: smoke|factorial|usl|usl_wr|ebpf|ebpf_curve|fio|facts|pack}"; rc=0
 case "$job" in
   smoke)
     H=$(up 3 ssd no) && [ -n "$H" ] || exit 1
@@ -52,6 +52,32 @@ case "$job" in
     CONFIGS="${CONFIGS:-yes:ssd no:ssd yes:balanced no:balanced}" CLIENTS="${CLIENTS:-80}" WR="${WR:-0.5}" \
         ./gce/run_ebpf_experiment.sh
     rc=$? ;;
+  fio)
+    # fsync-heavy sequential writes (4 KiB, fsync after each) on both log disks of one idle server
+    source gce/cluster.env
+    SSHO="-i $HOME/.ssh/google_compute_engine -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR"
+    python3 gce/gce_backend.py down >/dev/null 2>&1
+    ip=${Z1_IPS%% *}; mkdir -p fio_results
+    ssh $SSHO "$SSH_USER@$ip" 'sudo DEBIAN_FRONTEND=noninteractive apt-get install -y fio >/dev/null 2>&1; for d in balanced ssd; do
+        sudo fio --name=fsync-$d --directory=/zk-log-$d --rw=write --bs=4k --size=256m --fsync=1 --runtime=40 \
+             --time_based --output-format=json; sudo rm -f /zk-log-$d/fsync-$d*; done' > fio_results/fio_log_disks.json
+    rc=$?; ls -l fio_results ;;
+  usl_wr)
+    # extra USL curves at other write ratios, same configuration otherwise: WRS="0.5 0.0"
+    for wr in ${WRS:-0.5 0.0}; do
+      tag=wr$(printf '%s' "$wr" | tr -d .)
+      H=$(up 3 ssd yes) && [ -n "$H" ] || exit 1
+      HOSTS="$H" WRITE_RATIO="$wr" OUT="usl/usl_$tag.csv" CPU_OUT="usl/usl_client_cpu_$tag.csv" MNTR_DIR="usl/mntr_$tag" \
+          ./usl/run_usl_sweep.sh || exit 1
+    done
+    python3 gce/gce_backend.py down
+    rc=$? ;;
+  ebpf_curve)
+    # the probes along the USL curve's configuration (3 servers, write ratio 0.3, forceSync on, pd-ssd)
+    for n in ${NS:-1 16 64 160}; do
+      CONFIGS="yes:ssd" CLIENTS="$n" WR=0.3 OUT="ebpf_curve/n$n" TEX="/tmp/ebpf_n$n.tex" ./gce/run_ebpf_experiment.sh
+    done
+    rc=$? ;;
   facts)
     source gce/cluster.env
     SSHO="-i $HOME/.ssh/google_compute_engine -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR"
@@ -68,7 +94,7 @@ case "$job" in
   pack)
     mkdir -p gce/logs
     for f in ~/smoke.log ~/factorial.log ~/usl.log ~/ebpf.log; do [ -f "$f" ] && cp "$f" "gce/logs/$(basename "$f" .log).txt"; done
-    tar czf ~/results.tgz $(ls -d factorial/plan_gce factorial/results_gce.csv factorial/analysis_gce usl/usl_single.csv \
+    tar czf ~/results.tgz $(ls -d fio_results usl/usl_wr*.csv usl/usl_client_cpu_wr*.csv usl/mntr_wr* ebpf_curve factorial/plan_gce factorial/results_gce.csv factorial/analysis_gce usl/usl_single.csv \
         usl/usl_client_cpu.csv usl/mntr usl/out ebpf_results_gce* report/usl_text.tex report/ebpf_summary*.tex \
         report/stage_breakdown.tex gce/logs gce/testbed_facts.txt 2>/dev/null)
     rc=$?; ls -l ~/results.tgz ;;

@@ -54,10 +54,12 @@ while read -r n rep; do
   snap before
   vmstat 1 $((WARMUP + DURATION + 2)) > /tmp/vm.$$ 2>/dev/null &
   VM=$!
+  ( sleep $((WARMUP + 5)); snap mid ) &       # sessions per server while the clients are connected
+  MID=$!
   OUTLINE=$(java $JAVA_OPTS -jar "$JAR" --hosts "$HOSTS" --ensemble-size "$ENSEMBLE_SIZE" --clients "$n" \
       --write-ratio "$WRITE_RATIO" --duration "$DURATION" --warmup "$WARMUP" --pool-size 200 \
       --output "$OUT" --label "usl-r$rep" 2>&1 | tee /tmp/bench.$$ | grep -c '')
-  kill $VM 2>/dev/null; wait $VM 2>/dev/null
+  kill $VM 2>/dev/null; wait $VM $MID 2>/dev/null
   snap after
   BUSY=$(awk -v s=$((WARMUP+3)) 'NR>s+2 && $15 ~ /^[0-9]+$/ {sum+=100-$15; c++} END{if(c) printf "%.0f", sum/c}' /tmp/vm.$$)
   echo "$n,$rep,${BUSY:-NA}" >> "$CPU_OUT"
