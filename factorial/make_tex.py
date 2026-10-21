@@ -12,6 +12,7 @@ Usage: python3 make_tex.py --meta plan_gce/design_meta.json [--results factorial
 import argparse
 import csv
 import json
+import math
 import os
 from collections import defaultdict
 
@@ -28,6 +29,7 @@ def main():
     ap.add_argument("--results")
     ap.add_argument("--response", default="throughput_ops_sec")
     ap.add_argument("--outdir", default="../report")
+    ap.add_argument("--log10", action="store_true", help="sign table shows the mean of log10 of the replicates")
     a = ap.parse_args()
     meta = json.load(open(a.meta))
     F = meta["factors"]
@@ -68,7 +70,8 @@ def main():
         d = defaultdict(list)
         for r in csv.DictReader(open(a.results)):
             try:
-                d[int(r["std_run"])].append(float(r[a.response]))
+                v = float(r[a.response])
+                d[int(r["std_run"])].append(math.log10(v) if a.log10 else v)
             except (KeyError, ValueError):
                 pass
         means = {k: sum(v) / len(v) for k, v in d.items()}
@@ -79,12 +82,13 @@ def main():
     # two halves side by side (runs 1-16 | 17-32), so the table fits in the body of the report
     runs = sorted(first)
     half = -(-len(runs) // 2)
-    head = "Run & " + " & ".join(letters) + (" & $\\bar y$" if means else "")
+    head = "Run & " + " & ".join(letters) + ((" & $\\overline{\\log_{10} y}$" if a.log10 else " & $\\bar y$") if means else "")
+    yfmt = (lambda v: f"{v:.3f}") if a.log10 else (lambda v: f"{v:.0f}")
     ncol = 1 + len(letters) + (1 if means else 0)
 
     def cells(k):
         row = " & ".join("$+$" if int(first[k][l]) == 1 else "$-$" for l in letters)
-        return f"{k} & {row}" + (f" & {means[k]:.0f}" if k in means else (" & --" if means else ""))
+        return f"{k} & {row}" + (f" & {yfmt(means[k])}" if k in means else (" & --" if means else ""))
 
     with open(os.path.join(a.outdir, "design_signtable.tex"), "w") as fh:
         spec = "r" + "c" * len(letters) + ("r" if means else "")
@@ -93,6 +97,13 @@ def main():
         for i in range(half):
             right = cells(runs[i + half]) if i + half < len(runs) else " & ".join([""] * ncol)
             fh.write(cells(runs[i]) + " & " + right + " \\\\\n")
+        if means and len(means) == len(runs):
+            # effects q_j = (1/n) sum_i s_ij ybar_i, so the reader can reproduce the main effects from the table
+            n = len(runs)
+            q = [sum((1 if int(first[k][l]) == 1 else -1) * means[k] for k in runs) / n for l in letters]
+            q0 = sum(means.values()) / n
+            fh.write("\\midrule\n$q$ & " + " & ".join(f"{v:+.3f}" for v in q) + f" & {q0:.3f}"
+                     + " & " * ncol + " \\\\\n")
         fh.write("\\bottomrule\n\\end{tabular}\n")
     print(f"wrote design_factors.tex, design_alias.tex, design_signtable.tex in {a.outdir}")
 

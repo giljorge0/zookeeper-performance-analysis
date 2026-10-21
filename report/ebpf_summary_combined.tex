@@ -1,0 +1,22 @@
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+\texttt{forceSync}, log disk & off, bal. & off, ssd & on, bal. & on, ssd \\
+\midrule
+ops/s with probes & 29276 & 28739 & 26622 & 26674 \\
+ops/s without (mean of 2) & 28795 & 24992 & 28731 & 27301 \\
+fsync calls (eBPF) & 0 & 0 & 21393 & 23120 \\
+fsync mean, eBPF ($\mu$s) & -- & -- & 1064 & 986 \\
+fsync mean, ZooKeeper (ms) & -- & -- & 0.77 & 0.70 \\
+requests per flush & 1.9 & 1.8 & 17.4 & 16.0 \\
+to quorum ACK (ms) & 1.14 & 1.16 & 2.56 & 2.52 \\
+\midrule
+\multicolumn{5}{@{}l}{\emph{CPU of the leader (cores of 2)}} \\
+replication to followers & 0.67 & 0.67 & 0.55 & 0.59 \\
+client connections (I/O) & 0.40 & 0.38 & 0.40 & 0.39 \\
+request preparation & 0.20 & 0.21 & 0.25 & 0.25 \\
+commit & 0.19 & 0.18 & 0.17 & 0.16 \\
+log sync & 0.10 & 0.09 & 0.10 & 0.11 \\
+commit workers & 0.06 & 0.05 & 0.06 & 0.06 \\
+whole JVM & 1.73 & 1.70 & 1.61 & 1.62 \\
+\bottomrule
+\end{tabular}

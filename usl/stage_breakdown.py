@@ -41,7 +41,9 @@ LATENCY = [
     ("sync_processor_queue_and_flush_time_ms", "sync queue + flush"),
     ("fsynctime", "fsync"),
     ("quorum_ack_latency", "until quorum ACK"),
+    ("local_write_committed_time_ms", "commit to applied"),
     ("updatelatency", "server-side write latency"),
+    ("readlatency", "server-side read latency (leader)"),
 ]
 BATCH = ("sync_processor_batch_size", "requests per fsync")
 ALL_SERVERS = ["fsynctime", "sync_processor_batch_size", "sync_processor_queue_and_flush_time_ms"]
@@ -189,17 +191,17 @@ def plot(path, agg):
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     ns = [r["clients"] for r in agg]
-    fig, ax = plt.subplots(1, 2, figsize=(10, 3.8))
+    fig, ax = plt.subplots(1, 2, figsize=(8, 3.6))
     for metric, label in LATENCY:
         pts = [(n, r[metric]) for n, r in zip(ns, agg) if r[metric] is not None]
         if pts:
             ax[0].plot(*zip(*pts), "o-", ms=3, label=label)
     ax[0].set_xscale("log", base=2)
     ax[0].set_xlabel("concurrent clients N")
-    ax[0].set_ylabel("ms (mean per run; leader, write latency: all servers)")
+    ax[0].set_ylabel("ms, mean per run")
     ax[0].set_title("Time per pipeline stage")
     ax[0].grid(alpha=0.3)
-    ax[0].legend(fontsize=7)
+    ax[0].legend(fontsize=7.5)
     metric, label = BATCH
     pts = [(n, r[metric]) for n, r in zip(ns, agg) if r[metric] is not None]
     if pts:

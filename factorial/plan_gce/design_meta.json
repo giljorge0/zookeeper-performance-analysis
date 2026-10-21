@@ -7,7 +7,7 @@
       "low": 3,
       "high": 5,
       "hard": true,
-      "why": "quorum size: proposals and ACKs per write; the two usual production sizes",
+      "why": "quorum size: proposals and ACKs per write",
       "letter": "A"
     },
     {
@@ -15,7 +15,7 @@
       "param": "write_ratio",
       "low": 0.1,
       "high": 0.5,
-      "why": "share of requests that take the write pipeline (reads stay local)",
+      "why": "share of requests that take the write path",
       "letter": "B"
     },
     {
@@ -32,7 +32,7 @@
       "low": "yes",
       "high": "no",
       "hard": true,
-      "why": "removes the fsync from the write path: tests the log-sync stage",
+      "why": "removes the fsync from the write path",
       "letter": "D"
     },
     {
@@ -40,7 +40,7 @@
       "param": "payload_bytes",
       "low": 128,
       "high": 4096,
-      "why": "bytes logged, sent to every follower and synced per write",
+      "why": "bytes logged, replicated and synced per write",
       "letter": "E"
     },
     {
@@ -49,7 +49,7 @@
       "low": "pd-balanced",
       "high": "pd-ssd",
       "hard": true,
-      "why": "speed of the device under the fsync (dedicated log disk)",
+      "why": "device under the fsync",
       "letter": "F"
     }
   ],

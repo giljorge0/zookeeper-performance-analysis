@@ -237,6 +237,7 @@ def summarize(d):
         "fsync_calls": scalar(fs, "fsync_calls") or 0,
         "fsync_mean_us": (scalar(fs, "fsync_total_us") / scalar(fs, "fsync_calls")) if scalar(fs, "fsync_calls") else None,
         "fsync_p50_us": pct(fb, 0.50), "fsync_p99_us": pct(fb, 0.99), "fsync_max_us": scalar(fs, "fsync_max_us"),
+        "fsync_buckets": fb, "bio_buckets": bio,
         "bio_scope": bio_scope, "bio_ios": sum(c for _, _, c in bio),
         "bio_p50_us": pct(bio, 0.50), "bio_p99_us": pct(bio, 0.99),
         "runq_events": sum(c for _, _, c in rq), "runq_p50_us": pct(rq, 0.50), "runq_p99_us": pct(rq, 0.99),
@@ -268,6 +269,75 @@ def nice_label(label, r):
     return label.replace("_", "\\_")
 
 
+STAGE_NAMES = {"PrepRequestProcessor (zxid)": "request preparation", "SyncRequestProcessor (log, fsync)": "log sync",
+               "CommitProcessor": "commit", "commit workers (apply, reply)": "commit workers"}
+
+
+def short_label(r):
+    c = r["config"]
+    return f"{'on' if c.get('force_sync') == 'yes' else 'off'}, {'bal.' if c.get('log_disk') == 'balanced' else 'ssd'}"
+
+
+def combined_table(path, res):
+    """One table, configurations as columns: throughput, ZooKeeper's counters, fsync calls and CPU per thread."""
+    rs = list(res.values())
+    rows = [("ops/s with probes", [fmt(r["throughput"], 0) for r in rs]),
+            ("ops/s without (mean of 2)", [fmt(r["throughput_noprobe"], 0) for r in rs]),
+            ("fsync calls (eBPF)", [fmt(r["fsync_calls"], 0) for r in rs]),
+            ("fsync mean, eBPF ($\\mu$s)", [fmt(r["fsync_mean_us"], 0) for r in rs]),
+            ("fsync mean, ZooKeeper (ms)", [fmt(r["zk"].get("fsynctime"), 2) for r in rs]),
+            ("requests per flush", [fmt(r["zk"].get("sync_processor_batch_size"), 1) for r in rs]),
+            ("to quorum ACK (ms)", [fmt(r["zk"].get("quorum_ack_latency"), 2) for r in rs])]
+    stages = []
+    for r in rs:
+        for st in r["stage_cores"]:
+            if st not in stages and st != "other":
+                stages.append(st)
+    stages.sort(key=lambda st: -max(r["stage_cores"].get(st, 0) for r in rs))
+    cpu = [(st, [fmt(r["stage_cores"].get(st), 2) for r in rs]) for st in stages[:6]]
+    cpu.append(("whole JVM", [fmt(r["jvm_cores"], 2) for r in rs]))
+    with open(path, "w") as fh:
+        fh.write("\\begin{tabular}{@{}l" + "r" * len(rs) + "@{}}\n\\toprule\n")
+        fh.write("\\texttt{forceSync}, log disk & " + " & ".join(short_label(r) for r in rs) + " \\\\\n\\midrule\n")
+        for name, vals in rows:
+            fh.write(name + " & " + " & ".join(vals) + " \\\\\n")
+        fh.write("\\midrule\n\\multicolumn{" + str(len(rs) + 1) + "}{@{}l}{\\emph{CPU of the leader (cores of 2)}} \\\\\n")
+        for name, vals in cpu:
+            fh.write(STAGE_NAMES.get(name, name) + " & " + " & ".join(vals) + " \\\\\n")
+        fh.write("\\bottomrule\n\\end{tabular}\n")
+
+
+def cdf_plot(path, res):
+    """CDFs of the fsync latency and of the log disk's block-I/O latency, from the log2 histograms."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots(1, 2, figsize=(7.0, 2.7), sharey=True)
+    for i, r in enumerate(res.values()):
+        for a_, key in ((ax[0], "fsync_buckets"), (ax[1], "bio_buckets")):
+            b = sorted(r[key])
+            total = sum(c for _, _, c in b)
+            if not total:
+                continue
+            xs, ys, acc = [b[0][0]], [0.0], 0
+            for lo, hi, c in b:
+                acc += c
+                xs.append(hi)
+                ys.append(acc / total)
+            a_.plot(xs, ys, "o-", ms=3, color=f"C{i}", label=short_label(r))
+    for a_, title in ((ax[0], "fsync of the transaction log"), (ax[1], "block I/O on the log disk")):
+        a_.set_xscale("log", base=2)
+        a_.set_xlabel("latency ($\\mu$s, upper bucket bound)", fontsize=9)
+        a_.set_title(title, fontsize=9)
+        a_.grid(alpha=0.3)
+        a_.tick_params(labelsize=8)
+    ax[0].set_ylabel("fraction of calls", fontsize=9)
+    ax[1].legend(fontsize=8, title="forceSync, disk", title_fontsize=8)
+    fig.tight_layout()
+    fig.savefig(path, dpi=200)
+    plt.close(fig)
+
+
 def table(path, header, rows):
     with open(path, "w") as fh:
         fh.write("\\begin{tabular}{@{}l" + "r" * (len(header) - 1) + "@{}}\n\\toprule\n" + " & ".join(header)
@@ -282,6 +352,7 @@ def main():
     ap.add_argument("runs", nargs="+", help="LABEL=DIR")
     ap.add_argument("--tex", help="base name of the LaTeX tables, e.g. report/ebpf_summary.tex")
     ap.add_argument("--json")
+    ap.add_argument("--cdf", help="PNG with the CDFs of the fsync and log-disk latency")
     a = ap.parse_args()
     res = {}
     for spec in a.runs:
@@ -330,7 +401,11 @@ def main():
         rows = [[s] + [fmt(r["stage_cores"].get(s), 2) for r in res.values()] for s in stages[:7]]
         rows.append(["whole JVM"] + [fmt(r["jvm_cores"], 2) for r in res.values()])
         table(f"{base}_threads.tex", ["CPU cores used by"] + [nice_label(l, r) for l, r in res.items()], rows)
-        print(f"wrote {base}.tex, {base}_zk.tex, {base}_threads.tex")
+        combined_table(f"{base}_combined.tex", res)
+        print(f"wrote {base}.tex, {base}_zk.tex, {base}_threads.tex, {base}_combined.tex")
+    if a.cdf:
+        cdf_plot(a.cdf, res)
+        print("wrote", a.cdf)
 
 
 if __name__ == "__main__":

@@ -25,7 +25,7 @@ for v in "" "_log10"; do
   grep -E "^===|WARNING|unexplained" "factorial/analysis_gce$v/summary.txt" | sed 's/^/  /'
 done
 echo "== factorial: report tables and figures (throughput log10=$LOG10_THROUGHPUT, write p99 log10=$LOG10_P99)"
-$PY factorial/make_tex.py --meta "$META" --results "$RES" --outdir report >/dev/null
+$PY factorial/make_tex.py --meta "$META" --results "$RES" --outdir report $( [ "$LOG10_THROUGHPUT" = 1 ] && echo --log10 ) >/dev/null
 pick() { [ "$1" = 1 ] && echo factorial/analysis_gce_log10 || echo factorial/analysis_gce; }
 DT=$(pick "$LOG10_THROUGHPUT"); DP=$(pick "$LOG10_P99")
 cp "$DT/effects_throughput_ops_sec.tex" "$DT/pareto_throughput_ops_sec.png" "$DT/interactions_throughput_ops_sec.png" \
@@ -56,5 +56,6 @@ echo "  max client CPU in the sweep: $(sort -t, -k3 -n usl/usl_client_cpu.csv | 
 
 echo "== eBPF"
 ARGS=(); for d in ebpf_results_gce/fsync_*; do [ -d "$d" ] && ARGS+=("$(basename "$d")=$d"); done
-$PY ebpf/summarize.py "${ARGS[@]}" --tex report/ebpf_summary.tex --json ebpf_results_gce/summary.json | sed 's/^/  /'
+$PY ebpf/summarize.py "${ARGS[@]}" --tex report/ebpf_summary.tex --json ebpf_results_gce/summary.json \
+    --cdf report/ebpf_cdf.png | sed 's/^/  /'
 echo "done: report/*.tex and report/*.png are up to date; compile report/report.tex"
