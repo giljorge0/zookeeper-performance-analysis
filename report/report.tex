@@ -40,7 +40,7 @@
 We study the write pipeline of Apache ZooKeeper 3.9, a coordination service in which reads are served locally by
 any server while every write is serialized through one leader and a quorum. Stage II systematizes the
 evaluation on Google Compute Engine, with the servers and the load generator on separate machines. We
-(i) run a $2^{6-1}$ fractional factorial experiment over six factors (set of servers size, write ratio, number of clients,
+(i) run a $2^{6-1}$ fractional factorial experiment over six factors (number of servers, write ratio, number of clients,
 \texttt{forceSync}, payload size and log disk) with two replicates and a randomized, blocked run order;
 (ii) fit one Universal Scalability Law curve, with replicates, bootstrap confidence intervals and a test of whether
 the coherency term is justified; and (iii) follow a write through the pipeline with ZooKeeper's own per-stage counters
@@ -63,7 +63,7 @@ Apache ZooKeeper is an open-source coordination service used by systems such as 
 election, configuration management and distributed locking~\cite{hunt_zookeeper,apache_zookeeper_overview}.
 It has a clear client-server split, is genuinely distributed, and has a published replication protocol, Zab~\cite{zab_junqueira}.
 We chose it because its read/write asymmetry gives a clean hypothesis: reads are answered by any server and should
-scale with the amount of servers, whereas every write passes through a single leader and must reach a majority, so writes
+scale with the number of servers, whereas every write passes through a single leader and must reach a majority, so writes
 should not.
 
 Stage I measured throughput against the number of concurrent clients on one laptop and fitted the Universal
@@ -232,7 +232,7 @@ chosen among them; the others are fixed and reported so that the experiment can 
     Parameter & Value(s) & Role \\
     \midrule
     \multicolumn{3}{@{}l}{\emph{System}} \\
-    \textbf{Number voting servers}  & 3, 5 & A \\
+    \textbf{Number of voting servers} & 3, 5 & A \\
     \textbf{\texttt{forceSync}} (fsync of the transaction log) & yes, no & D \\
     \textbf{Log disk} (device of \texttt{dataLogDir}) & pd-balanced, pd-ssd (20\,GB each) & F \\
     Observers (non-voting servers) & 0 & fixed \\
@@ -731,6 +731,11 @@ deletes, watches or multi-operations. Natural next steps are observers, asynchro
 
 \begin{thebibliography}{12}
 
+\bibitem{hunt_zookeeper}
+P.~Hunt, M.~Konar, F.~P. Junqueira, and B.~Reed.
+\newblock ZooKeeper: Wait-free coordination for Internet-scale systems.
+\newblock In \emph{USENIX Annual Technical Conference}, 2010.
+
 \bibitem{zab_junqueira}
 F.~P. Junqueira, B.~C. Reed, and M.~Serafini.
 \newblock Zab: High-performance broadcast for primary-backup systems.
@@ -774,6 +779,16 @@ R.~Jain.
 B.~F. Cooper, A.~Silberstein, E.~Tam, R.~Ramakrishnan, and R.~Sears.
 \newblock Benchmarking cloud serving systems with YCSB.
 \newblock In \emph{ACM Symposium on Cloud Computing (SoCC)}, 2010.
+
+\bibitem{pumba}
+A.~Ledenev.
+\newblock Pumba: chaos testing and network emulation for Docker containers.
+\newblock \url{https://github.com/alexei-led/pumba}.
+
+\bibitem{gregg_bpf}
+B.~Gregg.
+\newblock \emph{BPF Performance Tools}.
+\newblock Addison-Wesley, 2019.
 
 \end{thebibliography}
 \end{document}
