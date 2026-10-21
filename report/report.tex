@@ -31,7 +31,7 @@
 ZooKeeper serves reads at any server, but every write goes through one leader and a quorum. We measured the cost of this write path on Google Compute Engine with a $2^{6-1}$ factorial experiment, Universal Scalability Law curves at three write ratios and five eBPF probes. The share of writes and the number of clients explain most of the variation, and turning \texttt{fsync} off helps at light load but hurts at saturation. With writes the curves show contention but no crosstalk, and the CPU the leader spends per operation near saturation matches the bottleneck demand the fit implies. We also found that a logging client had distorted our Stage I results.
 \end{abstract}
 
-\noindent\textbf{Git Commit Identifier:} \texttt{9a52eabcfe0019b8ab4ac96fb7bb2195694d70a0}
+\noindent\textbf{Git Commit Identifier:} \texttt{fb8b357223dbc89f01d806fe1c0b20fc7f0c3e3e}
 
 \section{Introduction}
 
