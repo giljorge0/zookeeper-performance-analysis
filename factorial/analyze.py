@@ -155,7 +155,8 @@ def write_outputs(res, outdir, resp, names, log10, topk):
     if plt is None:
         return
     top = res["eff"][:10]
-    plt.figure(figsize=(5.2, 3.4))
+    plt.rcParams.update({"font.size": 13})
+    plt.figure(figsize=(5.2, 3.6))
     plt.barh([e["label"] + ("" if e["sig"] else " (n.s.)") for e in reversed(top)],
              [e["pct"] for e in reversed(top)], color=["tab:blue" if e["sig"] else "lightgray" for e in reversed(top)])
     plt.xlabel("% of total variation" + (" (log10 of the response)" if log10 else ""))

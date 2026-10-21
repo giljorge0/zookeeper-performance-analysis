@@ -41,6 +41,7 @@ $PY factorial/effects_tex.py --dir factorial/analysis_gce --dir-log10 factorial/
 $PY factorial/whole_plot.py --results "$RES" --response throughput_ops_sec --response write_p99_ms --log10 \
     > factorial/analysis_gce_log10/whole_plot.txt
 sed 's/^/  /' factorial/analysis_gce_log10/whole_plot.txt
+$PY factorial/effects_all_tex.py --dir factorial/analysis_gce_log10 --out report/effects_all.tex | sed 's/^/  /'
 
 echo "== USL curve and per-stage breakdown"
 mkdir -p usl/out

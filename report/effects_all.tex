@@ -1,0 +1,39 @@
+\begin{tabular}{@{}llrrrrrr@{}}
+\toprule
+ & & \multicolumn{3}{c}{throughput} & \multicolumn{3}{c}{write p99} \\
+\cmidrule(lr){3-5}\cmidrule(lr){6-8}
+Effect & Alias & $q$ & $\times$ & \% & $q$ & $\times$ & \% \\
+\midrule
+A & BCDEF & +0.029 & 1.14 & 1.0 & +0.021$^\dagger$ & 1.10 & 0.2 \\
+B & ACDEF & -0.228 & 0.35 & 60.3 & +0.041 & 1.21 & 0.6 \\
+C & ABDEF & +0.149 & 1.98 & 25.6 & +0.534 & 11.68 & 93.7 \\
+D & ABCEF & +0.015$^\dagger$ & 1.07 & 0.3 & -0.042 & 0.82 & 0.6 \\
+E & ABCDF & -0.066 & 0.74 & 5.0 & +0.061 & 1.32 & 1.2 \\
+F & ABCDE & -0.007$^\dagger$ & 0.97 & 0.1 & +0.004$^\dagger$ & 1.02 & 0.0 \\
+AB & CDEF & -0.000$^\dagger$ & 1.00 & 0.0 & -0.034 & 0.85 & 0.4 \\
+AC & BDEF & +0.018 & 1.09 & 0.4 & +0.010$^\dagger$ & 1.05 & 0.0 \\
+AD & BCEF & +0.006$^\dagger$ & 1.03 & 0.0 & +0.004$^\dagger$ & 1.02 & 0.0 \\
+AE & BCDF & -0.008$^\dagger$ & 0.97 & 0.1 & +0.008$^\dagger$ & 1.04 & 0.0 \\
+AF & BCDE & +0.000$^\dagger$ & 1.00 & 0.0 & +0.000$^\dagger$ & 1.00 & 0.0 \\
+BC & ADEF & -0.016 & 0.93 & 0.3 & -0.020$^\dagger$ & 0.91 & 0.1 \\
+BD & ACEF & +0.009$^\dagger$ & 1.04 & 0.1 & +0.015$^\dagger$ & 1.07 & 0.1 \\
+BE & ACDF & +0.003$^\dagger$ & 1.01 & 0.0 & -0.022$^\dagger$ & 0.90 & 0.2 \\
+BF & ACDE & -0.006$^\dagger$ & 0.97 & 0.0 & -0.003$^\dagger$ & 0.99 & 0.0 \\
+CD & ABEF & -0.056 & 0.77 & 3.6 & +0.059 & 1.31 & 1.1 \\
+CE & ABDF & +0.007$^\dagger$ & 1.03 & 0.1 & -0.013$^\dagger$ & 0.94 & 0.1 \\
+CF & ABDE & -0.007$^\dagger$ & 0.97 & 0.1 & +0.010$^\dagger$ & 1.05 & 0.0 \\
+DE & ABCF & +0.008$^\dagger$ & 1.04 & 0.1 & -0.002$^\dagger$ & 0.99 & 0.0 \\
+DF & ABCE & +0.002$^\dagger$ & 1.01 & 0.0 & -0.006$^\dagger$ & 0.97 & 0.0 \\
+EF & ABCD & +0.021 & 1.10 & 0.5 & -0.004$^\dagger$ & 0.98 & 0.0 \\
+ABC & DEF & +0.002$^\dagger$ & 1.01 & 0.0 & -0.016$^\dagger$ & 0.93 & 0.1 \\
+ABD & CEF & +0.007$^\dagger$ & 1.03 & 0.1 & +0.005$^\dagger$ & 1.03 & 0.0 \\
+ABE & CDF & +0.001$^\dagger$ & 1.00 & 0.0 & -0.004$^\dagger$ & 0.98 & 0.0 \\
+ABF & CDE & -0.011$^\dagger$ & 0.95 & 0.1 & +0.001$^\dagger$ & 1.00 & 0.0 \\
+ACD & BEF & +0.005$^\dagger$ & 1.02 & 0.0 & -0.013$^\dagger$ & 0.94 & 0.1 \\
+ACE & BDF & -0.012$^\dagger$ & 0.95 & 0.2 & +0.016$^\dagger$ & 1.07 & 0.1 \\
+ACF & BDE & +0.003$^\dagger$ & 1.01 & 0.0 & +0.004$^\dagger$ & 1.02 & 0.0 \\
+ADE & BCF & -0.003$^\dagger$ & 0.98 & 0.0 & -0.004$^\dagger$ & 0.98 & 0.0 \\
+ADF & BCE & +0.004$^\dagger$ & 1.02 & 0.0 & -0.004$^\dagger$ & 0.98 & 0.0 \\
+AEF & BCD & -0.002$^\dagger$ & 0.99 & 0.0 & -0.020$^\dagger$ & 0.91 & 0.1 \\
+\bottomrule
+\end{tabular}

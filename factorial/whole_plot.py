@@ -45,8 +45,11 @@ def main():
         se = math.sqrt(sse / df / len(m))
         t = tcrit(df)
         print(f"=== {resp}{' (log10)' if a.log10 else ''}: {len(m)} blocks, whole-plot error df={df}")
-        for i, f in enumerate(HARD, start=1):
-            q = statistics.mean(k[i] * v for k, v in m.items())
+        # every whole-plot contrast: the three factors and their interactions (ADF is aliased with BCE)
+        words = ["A", "D", "F", "AD", "AF", "DF", "ADF"]
+        for f in words:
+            sign = lambda k: math.prod(k[1 + HARD.index(c)] for c in f)
+            q = statistics.mean(sign(k) * v for k, v in m.items())
             sig = "yes" if abs(q) > t * se else "no"
             fac = f"  (x{10 ** (2 * q):.2f})" if a.log10 else ""
             print(f"{f}: q={q:+.4f}  95% CI [{q - t * se:+.4f}, {q + t * se:+.4f}]{fac}  significant: {sig}")

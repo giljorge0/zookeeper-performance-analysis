@@ -114,9 +114,12 @@ def main():
                          capsize=2, color=c, label=f"{100 * r['wr']:.0f}% writes")
             y = usl(grid, f["gamma"], f["alpha"], f["beta"]) if r["kappa"] else amdahl(grid, *f["amdahl"][:2])
             plt.plot(grid, y, "-" if r["kappa"] else "--", color=c, lw=1)
+            lin = [(g, f["gamma"] * g) for g in grid if f["gamma"] * g <= 130000]
+            plt.plot(*zip(*lin), ":", color=c, lw=1, alpha=0.7)
         plt.xlabel("concurrent clients N")
         plt.ylabel("throughput (ops/s)")
-        plt.ylim(bottom=0)
+        plt.ylim(0, 130000)
+        plt.plot([], [], ":", color="grey", label="ideal $\\lambda N$")
         plt.grid(alpha=0.3)
         plt.legend(fontsize=12)
         plt.tight_layout()

@@ -17,6 +17,7 @@ import os
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+plt.rcParams.update({"font.size": 13})
 
 import analyze
 
@@ -65,19 +66,19 @@ def main():
     if twos:
         # on the log10 model, draw geometric means in the response's own units, on an axis that starts at zero
         unlog = (lambda v: 10 ** v) if a.log10 else (lambda v: v)
-        ilabel = analyze.label(a.response) + (", geometric mean" if a.log10 else "")
-        fig, axes = plt.subplots(1, len(twos), figsize=(3.4 * len(twos), 3.2), sharey=True, squeeze=False)
+        ilabel = ("ops/s, geometric mean" if a.response == "throughput_ops_sec" else analyze.label(a.response)) if a.log10 else analyze.label(a.response)
+        fig, axes = plt.subplots(1, len(twos), figsize=(3.9 * len(twos), 3.4), sharey=True, squeeze=False)
         for ax, e in zip(axes[0], twos):
             x, z = e["word"][0], e["word"][1]
             for zl, style in ((-1, "tab:blue"), (1, "tab:red")):
                 pts = [unlog(mean_at(lambda lv, xl=xl, zl=zl: lv[x] == xl and lv[z] == zl)) for xl in (-1, 1)]
                 ax.plot([-1, 1], pts, "o-", color=style, label=f"{name(z)} = {fac[z]['low' if zl < 0 else 'high']}")
             ax.set_xticks([-1, 1])
-            ax.set_xticklabels([str(fac[x]["low"]), str(fac[x]["high"])], fontsize=8)
-            ax.set_xlabel(name(x), fontsize=8)
+            ax.set_xticklabels([str(fac[x]["low"]), str(fac[x]["high"])], fontsize=12)
+            ax.set_xlabel(name(x) + " (two measured levels)", fontsize=12)
             ax.set_ylim(bottom=0)
-            ax.set_title(f"{e['label']}  ({e['pct']:.1f}% of variation)", fontsize=9)
-            ax.legend(fontsize=7)
+            ax.set_title(f"{e['label']}  ({e['pct']:.1f}% of variation)", fontsize=13)
+            ax.legend(fontsize=11)
             ax.grid(alpha=0.3)
         axes[0][0].set_ylabel(ilabel)
         fig.tight_layout()

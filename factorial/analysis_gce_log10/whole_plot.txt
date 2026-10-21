@@ -2,7 +2,15 @@
 A: q=+0.0291  95% CI [+0.0175, +0.0407]  (x1.14)  significant: yes
 D: q=+0.0147  95% CI [+0.0031, +0.0263]  (x1.07)  significant: yes
 F: q=-0.0068  95% CI [-0.0184, +0.0048]  (x0.97)  significant: no
+AD: q=+0.0059  95% CI [-0.0057, +0.0175]  (x1.03)  significant: no
+AF: q=+0.0002  95% CI [-0.0114, +0.0118]  (x1.00)  significant: no
+DF: q=+0.0018  95% CI [-0.0098, +0.0135]  (x1.01)  significant: no
+ADF: q=+0.0036  95% CI [-0.0080, +0.0152]  (x1.02)  significant: no
 === write_p99_ms (log10): 16 blocks, whole-plot error df=7
 A: q=+0.0215  95% CI [+0.0138, +0.0291]  (x1.10)  significant: yes
 D: q=-0.0421  95% CI [-0.0498, -0.0344]  (x0.82)  significant: yes
 F: q=+0.0041  95% CI [-0.0035, +0.0118]  (x1.02)  significant: no
+AD: q=+0.0037  95% CI [-0.0039, +0.0114]  (x1.02)  significant: no
+AF: q=+0.0001  95% CI [-0.0075, +0.0078]  (x1.00)  significant: no
+DF: q=-0.0059  95% CI [-0.0135, +0.0018]  (x0.97)  significant: no
+ADF: q=-0.0042  95% CI [-0.0118, +0.0035]  (x0.98)  significant: no
