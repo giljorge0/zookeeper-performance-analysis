@@ -136,7 +136,7 @@ Before the Stage II experiments we re-examined the Stage I data and found three 
 change two conclusions of the Stage I report and because they shaped the design of Stage II.
 
 \paragraph{The load generator logged every operation.}
-% src: results_java_noisy.csv, results_java_v2.csv, gap_diagnosis.csv
+% src: data/results_java_noisy.csv, data/results_java_v2.csv, data/gap_diagnosis.csv
 The same configuration (3 servers, 20 clients, 30\% writes) reached 6{,}364 ops/s in the Stage I sweep but
 14{,}832 ops/s when the sweep was repeated with a quiet client. A controlled comparison showed that the jar used for the
 sweep printed about 145{,}000 lines in a 15\,s run, roughly one per operation: the shaded jar contained Logback, whose
@@ -153,7 +153,7 @@ servers, and the standalone server no longer saturated within 80 clients (29{,}0
 claim and re-measure $\alpha$ in Section~\ref{sec:usl}.
 
 \paragraph{Run-to-run variation on a laptop is large.}
-% src: gap_diagnosis.csv
+% src: data/gap_diagnosis.csv
 In the same comparison, repetitions of an identical variant differed by up to a factor of two (6{,}285 against
 12{,}043 ops/s), more than any difference between the variants. The Stage I
 sweep used one run per point in order of increasing load, so drift and load were confounded, and the differences between

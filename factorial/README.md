@@ -16,7 +16,7 @@ all 6 main effects and all 15 two-factor interactions are estimated cleanly from
 | F | log disk (`dataLogDir`) | pd-balanced | pd-ssd | yes |
 
 `factors_gce6.json` is the experiment on Compute Engine. `factors_local6.json` is the same design for Docker on one
-machine, with factor F replaced by its local stand-in (transaction log on disk vs tmpfs); `demo.sh` uses it.
+machine, with factor F replaced by its local stand-in (transaction log on disk vs tmpfs); `scripts/demo.sh` uses it.
 `factors_pilot.json` is the earlier 7-factor local pilot (with a server CPU-quota factor); the self-tests use it.
 
 Restricted randomization: runs that share the levels of the hard-to-change factors (A, D, F) form a block (one

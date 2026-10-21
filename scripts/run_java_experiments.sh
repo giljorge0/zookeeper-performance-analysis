@@ -21,6 +21,7 @@
 
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(dirname "$SCRIPT_DIR")"   # data/, java-benchmark/ and the plot folders live here
 # shellcheck source=./scale_ensemble.sh
 source "${SCRIPT_DIR}/scale_ensemble.sh"
 
@@ -31,9 +32,9 @@ DURATION="${DURATION:-30}"
 WARMUP="${WARMUP:-5}"
 POOL_SIZE="${POOL_SIZE:-200}"
 JAVA_OPTS="${JAVA_OPTS:--Xms512m -Xmx1g}"
-RESULTS_CSV="${RESULTS_CSV:-${SCRIPT_DIR}/results_java.csv}"
-METRICS_CSV="${METRICS_CSV:-${SCRIPT_DIR}/metrics_java.csv}"
-JAVA_DIR="${SCRIPT_DIR}/java-benchmark"
+RESULTS_CSV="${RESULTS_CSV:-${REPO_DIR}/data/results_java.csv}"
+METRICS_CSV="${METRICS_CSV:-${REPO_DIR}/data/metrics_java.csv}"
+JAVA_DIR="${REPO_DIR}/java-benchmark"
 JAR="${JAVA_DIR}/target/zk-benchmark-1.0-SNAPSHOT.jar"
 
 command -v java >/dev/null || { echo "[java] ERROR: java not on PATH" >&2; exit 1; }
@@ -111,4 +112,4 @@ done
 stop_ensemble
 echo ""
 echo "[java] done. Fit USL (separate output dir so the Python fits are preserved):"
-echo "  python3 ${SCRIPT_DIR}/usl_fit.py --input ${RESULTS_CSV} --output-dir ${SCRIPT_DIR}/usl_plots_java"
+echo "  python3 ${SCRIPT_DIR}/usl_fit.py --input ${RESULTS_CSV} --output-dir ${REPO_DIR}/usl_plots_java"

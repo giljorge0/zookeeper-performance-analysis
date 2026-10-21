@@ -35,6 +35,7 @@
 
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(dirname "$SCRIPT_DIR")"   # data/, java-benchmark/ and the plot folders live here
 # shellcheck source=./scale_ensemble.sh
 source "${SCRIPT_DIR}/scale_ensemble.sh"
 
@@ -48,7 +49,7 @@ DELAY_MS="${DELAY_MS:-20}"
 JITTER_MS="${JITTER_MS:-2}"
 PUMBA_IMAGE="${PUMBA_IMAGE:-ghcr.io/alexei-led/pumba:latest}"
 TC_IMAGE="${TC_IMAGE:-gaiadocker/iproute2}"
-RESULTS_CSV="${RESULTS_CSV:-${SCRIPT_DIR}/chaos_results.csv}"
+RESULTS_CSV="${RESULTS_CSV:-${REPO_DIR}/data/chaos_results.csv}"
 
 # --- compute a safe Pumba chaos window ---
 # per_point_overhead covers benchmark.py's znode-pool setup/teardown around
@@ -148,4 +149,4 @@ stop_ensemble
 echo ""
 echo "[chaos] done: ${RESULTS_CSV}"
 echo "[chaos] compare against the healthy baseline with:"
-echo "  python3 ${SCRIPT_DIR}/plot_chaos.py --healthy ${SCRIPT_DIR}/results.csv --chaos ${RESULTS_CSV} --ensemble-size ${ENSEMBLE_SIZE}"
+echo "  python3 ${SCRIPT_DIR}/plot_chaos.py --healthy ${REPO_DIR}/data/results.csv --chaos ${RESULTS_CSV} --ensemble-size ${ENSEMBLE_SIZE}"

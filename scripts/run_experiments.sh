@@ -20,6 +20,7 @@
 
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(dirname "$SCRIPT_DIR")"   # data/, java-benchmark/ and the plot folders live here
 # shellcheck source=./scale_ensemble.sh
 source "${SCRIPT_DIR}/scale_ensemble.sh"
 
@@ -29,8 +30,8 @@ WRITE_RATIO="${WRITE_RATIO:-0.3}"
 DURATION="${DURATION:-30}"
 WARMUP="${WARMUP:-5}"
 POOL_SIZE="${POOL_SIZE:-200}"
-RESULTS_CSV="${RESULTS_CSV:-${SCRIPT_DIR}/results.csv}"
-METRICS_CSV="${METRICS_CSV:-${SCRIPT_DIR}/metrics.csv}"
+RESULTS_CSV="${RESULTS_CSV:-${REPO_DIR}/data/results.csv}"
+METRICS_CSV="${METRICS_CSV:-${REPO_DIR}/data/metrics.csv}"
 
 echo "[run_experiments] ensemble sizes: ${ENSEMBLE_SIZES}"
 echo "[run_experiments] client counts:  ${CLIENT_COUNTS}"
@@ -86,4 +87,4 @@ done
 stop_ensemble
 echo ""
 echo "[run_experiments] done. Fit USL with:"
-echo "  python3 ${SCRIPT_DIR}/usl_fit.py --input ${RESULTS_CSV} --output-dir ${SCRIPT_DIR}/usl_plots"
+echo "  python3 ${SCRIPT_DIR}/usl_fit.py --input ${RESULTS_CSV} --output-dir ${REPO_DIR}/usl_plots"

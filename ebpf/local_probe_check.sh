@@ -13,7 +13,7 @@ cd "$(dirname "$0")/.."
 OUT="${1:-ebpf_results_local/fsync_yes_local}"
 JAR=$(ls java-benchmark/target/*.jar 2>/dev/null | grep -v original | head -1)
 [ -f "$JAR" ] || { echo "no jar: (cd java-benchmark && mvn -q -DskipTests clean package)"; exit 1; }
-source ./scale_ensemble.sh >/dev/null 2>&1; set +e +u +o pipefail
+source ./scripts/scale_ensemble.sh >/dev/null 2>&1; set +e +u +o pipefail
 echo "starting a 3-server ensemble..."
 stop_ensemble >/dev/null 2>&1; start_ensemble 3 >/dev/null 2>&1
 wait_ensemble 3 90 >/dev/null 2>&1 || { echo "the ensemble did not start"; stop_ensemble >/dev/null 2>&1; exit 1; }

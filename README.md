@@ -10,7 +10,7 @@ through one leader and needs a quorum. This repository measures where that write
 |---|---|---|
 | Question | How does throughput scale with the number of clients? | Which factors and which pipeline stage limit it? |
 | Method | Concurrency sweeps + Universal Scalability Law (USL) fits, YCSB cross-check, failover, network delay | 2^(6-1) fractional factorial experiment, one replicated USL curve with a per-stage breakdown, five eBPF probes |
-| Code | `java-benchmark/`, `run_java_*.sh`, `usl_fit.py`, `run_ycsb.sh` | `factorial/`, `usl/`, `gce/`, `ebpf/` |
+| Code | `java-benchmark/`, `scripts/` (Stage I scripts), `data/` | `factorial/`, `usl/`, `gce/`, `ebpf/` |
 
 The report is `report/report.tex` (LNCS format). Everything it states is produced by code in this repository.
 
@@ -40,10 +40,10 @@ Established with the data in this repository:
 - **The Stage I load generator was throttled by its own logging.** The shaded jar contained Logback with its default DEBUG
   configuration, so the client printed about one line per operation (~145,000 lines per 15 s run) and its threads queued on
   the output. The same point (3 servers, 20 clients) gave 6.4k ops/s in the Stage I sweep and 14.8k ops/s when the sweep
-  was repeated with a quiet client (`results_java_noisy.csv`, `results_java_v2.csv`). This invalidates the Stage I claim
-  that the contention coefficient was the same for every ensemble size (`diagnose_gap.sh`, `gap_diagnosis.csv`).
+  was repeated with a quiet client (`data/results_java_noisy.csv`, `data/results_java_v2.csv`). This invalidates the Stage I claim
+  that the contention coefficient was the same for every ensemble size (`scripts/diagnose_gap.sh`, `data/gap_diagnosis.csv`).
 - **Run-to-run variation on a laptop is large:** repetitions of an identical configuration differed by up to a factor of
-  two (6.3k against 12.0k ops/s in `gap_diagnosis.csv`), which is why Stage II uses dedicated VMs, replicates and
+  two (6.3k against 12.0k ops/s in `data/gap_diagnosis.csv`), which is why Stage II uses dedicated VMs, replicates and
   randomized run order.
 - **Network delay:** a 20 ms egress delay reduces single-client throughput by 116× (not 27×; the old figure used the wrong
   baseline), but only 9.5× at 80 clients, because clients overlap their waiting. Median read latency under delay is 22.7 ms (one
@@ -75,25 +75,29 @@ Stage II, on Google Compute Engine (client n2-standard-8, servers n2-standard-2,
 
 ```
 README.md                      this file
-demo.sh                        5-minute local demo
 requirements.txt               Python dependencies (numpy, scipy, matplotlib)
+scripts/demo.sh                5-minute local demo
 
 ── Shared tooling ───────────────────────────────────────────────────────────────────────────────────
-scale_ensemble.sh              start / wait / stop an N-server ensemble with plain `docker run` (no Compose)
-metrics_collector.py           polls every server's `mntr` output once per second
+scripts/scale_ensemble.sh      start / wait / stop an N-server ensemble with plain `docker run` (no Compose)
+scripts/metrics_collector.py   polls every server's `mntr` output once per second
 java-benchmark/                multi-threaded Java load generator
   src/main/java/Benchmark.java   closed-loop clients, znode pool, exact percentiles
   src/main/resources/logback.xml turns client logging off (see "Troubleshooting")
   pom.xml                        builds the shaded executable jar
 
 ── Stage I (one host) ───────────────────────────────────────────────────────────────────────────────
-run_java_experiments.sh        sweep: ensemble sizes × client counts -> results_java*.csv
-usl_fit.py                     per-ensemble-size USL fit (Stage I)
-run_ycsb.sh                    YCSB cross-validation, workloads A/B/C
-run_java_chaos.sh, plot_chaos.py   20 ms egress delay with Pumba / tc netem, comparison plot
-diagnose_gap.sh                found the client-logging problem
-check_chaos.py                 recomputes the delay collapse factor against the Java baseline
-pipeline_analysis.md           Stage I write-up of the request pipelines
+scripts/                       the Stage I scripts (they run from anywhere; data go to data/)
+  run_java_experiments.sh        sweep: ensemble sizes × client counts -> data/results_java*.csv
+  usl_fit.py                     per-ensemble-size USL fit (Stage I)
+  run_ycsb.sh                    YCSB cross-validation, workloads A/B/C -> ycsb_results/
+  run_java_chaos.sh, plot_chaos.py   20 ms egress delay with Pumba / tc netem, comparison plot
+  diagnose_gap.sh                found the client-logging problem -> data/gap_diagnosis.csv
+  check_chaos.py                 recomputes the delay collapse factor against the Java baseline
+  benchmark.py, run_experiments.sh, run_chaos_experiment.sh   the earlier Python load generator and its sweeps
+data/                          Stage I measurements (results_java*.csv, chaos_results*.csv, metrics*.csv, gap_diagnosis.csv)
+docs/                          pipeline_analysis.md (Stage I write-up of the request pipelines), zookeeper-setup-guide.md
+usl_plots*/, ycsb_results/     Stage I fits and YCSB results
 
 ── Stage II ─────────────────────────────────────────────────────────────────────────────────────────
 usl/                           ONE USL curve: dense load levels, replicates, random order
@@ -104,7 +108,7 @@ usl/                           ONE USL curve: dense load levels, replicates, ran
   selftest_usl.py, test_stage_breakdown.py   validation on synthetic data
 factorial/                     2^(6-1) fractional factorial experiment
   factors_gce6.json              the six factors and levels on Compute Engine
-  factors_local6.json            the same design on Docker (log disk -> disk vs tmpfs); used by demo.sh
+  factors_local6.json            the same design on Docker (log disk -> disk vs tmpfs); used by scripts/demo.sh
   factors_pilot.json             earlier 7-factor local pilot (with a CPU-quota factor); used by the self-tests
   plan_gce/                      the plan that was run: plan.csv (run order), sign_table.csv, design_meta.json
   design.py                      sign table, defining relation, resolution, aliases, randomized blocked plan
@@ -138,7 +142,7 @@ report/stage1_report.tex       the Stage I report, as it was at the Stage I comm
 report/make_artifacts.sh       regenerates every table and figure of the report from the raw results
 ```
 
-Result files (`results_java*.csv`, `chaos_results_java.csv`, `ycsb_results/`, `usl_plots_*`): the `*_noisy.csv` files were
+Result files (`data/results_java*.csv`, `data/chaos_results_java.csv`, `ycsb_results/`, `usl_plots_*`): the `*_noisy.csv` files were
 collected before the logging fix and are kept only for the before/after comparison.
 
 ---
@@ -162,10 +166,10 @@ collected before the logging fix and are kept only for the before/after comparis
 ```bash
 git clone <this repository> && cd <repository>
 pip install -r requirements.txt
-./demo.sh
+./scripts/demo.sh
 ```
 
-`demo.sh` (needs Docker, JDK, Maven):
+`scripts/demo.sh` (needs Docker, JDK, Maven; it can be started from any directory):
 
 1. builds the load generator,
 2. starts a **3-server ZooKeeper ensemble** with `docker run`,
@@ -180,7 +184,7 @@ One measurement point by hand:
 
 ```bash
 (cd java-benchmark && mvn -q -DskipTests clean package)
-source scale_ensemble.sh && start_ensemble 3 && wait_ensemble 3 90
+source scripts/scale_ensemble.sh && start_ensemble 3 && wait_ensemble 3 90
 java -jar java-benchmark/target/zk-benchmark-1.0-SNAPSHOT.jar \
   --hosts 127.0.0.1:2181,127.0.0.1:2182,127.0.0.1:2183 \
   --ensemble-size 3 --clients 20 --write-ratio 0.3 --duration 30 --warmup 5 --output results.csv
@@ -197,12 +201,12 @@ Benchmark options: `--hosts --ensemble-size --clients --write-ratio --duration -
 ### Stage I (one host, Docker)
 
 ```bash
-./run_java_experiments.sh                      # sizes 1,3,5 × clients 1..80  -> results_java.csv (~20 min)
-python3 usl_fit.py --input results_java.csv --output-dir usl_plots
-./run_ycsb.sh                                  # needs a running 3-node ensemble
-./run_java_chaos.sh                            # 20 ms delay sweep -> chaos_results_java.csv (~15 min)
-python3 check_chaos.py --healthy results_java.csv --chaos chaos_results_java.csv
-./diagnose_gap.sh                              # the client-logging diagnosis (~10 min)
+./scripts/run_java_experiments.sh              # sizes 1,3,5 × clients 1..80  -> data/results_java.csv (~20 min)
+python3 scripts/usl_fit.py --input data/results_java.csv --output-dir usl_plots
+./scripts/run_ycsb.sh                                  # needs a running 3-node ensemble
+./scripts/run_java_chaos.sh                    # 20 ms delay sweep -> data/chaos_results_java.csv (~15 min)
+python3 scripts/check_chaos.py --healthy data/results_java_v2.csv --chaos data/chaos_results_java.csv
+./scripts/diagnose_gap.sh                              # the client-logging diagnosis (~10 min)
 ```
 
 Close other applications first: a laptop that is busy, hot or low on memory gives unreliable numbers.
@@ -363,7 +367,7 @@ Placeholders that still need a measurement are shown in red (`\todo{...}`) in th
 | `python3 usl/test_stage_breakdown.py` | per-run leader deltas of the `mntr` counters, pooled and all-server means, tables | Python |
 | `python3 ebpf/test_summarize.py` | the probe-output parsers on synthetic bpftrace/bcc output: histograms, per-disk selection, thread CPU, overhead, `mntr` deltas | Python |
 | `python3 gce/test_verify.py` | the check that the server-side factors were applied (forceSync flag of the JVM, log directory), against a fake JVM | bash, pgrep, nc |
-| `./demo.sh` | the real stack: Docker servers, Java client, runner | Docker, JDK, Maven |
+| `./scripts/demo.sh` | the real stack: Docker servers, Java client, runner | Docker, JDK, Maven |
 | `sudo ./ebpf/local_probe_check.sh` | the five probes on a real (local) ZooKeeper leader under load | root, bpftrace, bcc, Docker |
 
 These tests do not cover Compute Engine itself; `gce/vm_jobs.sh smoke` does, and each runner verifies its own

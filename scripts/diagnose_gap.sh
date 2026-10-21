@@ -14,12 +14,12 @@
 #
 # Usage (repo root, no other ZooKeeper containers running):  ./diagnose_gap.sh
 #   REPS=3 CLIENTS=20 DURATION=15 WARMUP=3 JAR=path/to.jar ./diagnose_gap.sh
-cd "$(dirname "$0")"
-source ./scale_ensemble.sh >/dev/null 2>&1
+cd "$(dirname "$0")/.."   # repository root
+source ./scripts/scale_ensemble.sh >/dev/null 2>&1
 set +e +u +o pipefail
 JAR="${JAR:-$(ls java-benchmark/target/*.jar 2>/dev/null | grep -v original | head -1)}"
 REPS="${REPS:-3}"; CLIENTS="${CLIENTS:-20}"; DURATION="${DURATION:-15}"; WARMUP="${WARMUP:-3}"
-OUT="gap_diagnosis.csv"; TMP="$(mktemp -d)"
+OUT="data/gap_diagnosis.csv"; TMP="$(mktemp -d)"
 [ -f "$JAR" ] || { echo "no jar: build with (cd java-benchmark && mvn -q -DskipTests clean package)"; exit 1; }
 
 echo "== 1. logging backends inside $JAR =="
@@ -41,7 +41,7 @@ echo "variant,rep,throughput_ops_sec,p99_ms,stdout_lines" > "$OUT"
 run_variant() {  # name opts collector(0/1)
   local name="$1" opts="$2" coll="$3" cpid=""
   if [ "$coll" = "1" ]; then
-    python3 metrics_collector.py --ports 2181,2182,2183 --interval 1.0 --output "$TMP/m.csv" >/dev/null 2>&1 &
+    python3 scripts/metrics_collector.py --ports 2181,2182,2183 --interval 1.0 --output "$TMP/m.csv" >/dev/null 2>&1 &
     cpid=$!; sleep 1
   fi
   # shellcheck disable=SC2086

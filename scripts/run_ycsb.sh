@@ -28,9 +28,10 @@
 
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(dirname "$SCRIPT_DIR")"   # data/, java-benchmark/ and the plot folders live here
 
 YCSB_REPO="${YCSB_REPO:-https://github.com/brianfrankcooper/YCSB.git}"
-YCSB_DIR="${YCSB_DIR:-${SCRIPT_DIR}/ycsb-src}"
+YCSB_DIR="${YCSB_DIR:-${REPO_DIR}/ycsb-src}"
 ZK_HOSTS="${ZK_HOSTS:-127.0.0.1:2181,127.0.0.1:2182,127.0.0.1:2183}"
 ZK_CHROOT_BASE="${ZK_CHROOT_BASE:-/ycsb-bench}"
 LEADER_CONTAINER="${LEADER_CONTAINER:-zk1}"   # any live container works for zkCli
@@ -38,7 +39,7 @@ RECORDCOUNT="${RECORDCOUNT:-10000}"
 OPERATIONCOUNT="${OPERATIONCOUNT:-50000}"
 THREADS="${THREADS:-1 4 16 32}"
 WORKLOADS="${WORKLOADS:-workloada workloadb workloadc}"
-RESULTS_DIR="${RESULTS_DIR:-${SCRIPT_DIR}/ycsb_results}"
+RESULTS_DIR="${RESULTS_DIR:-${REPO_DIR}/ycsb_results}"
 SUMMARY_CSV="${SUMMARY_CSV:-${RESULTS_DIR}/ycsb_summary.csv}"
 
 SKIP_BUILD=0

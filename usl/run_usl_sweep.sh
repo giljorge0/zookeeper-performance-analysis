@@ -26,7 +26,7 @@ OUT="${OUT:-usl/usl_single.csv}"; CPU_OUT="${CPU_OUT:-usl/usl_client_cpu.csv}"
 [ -f "$JAR" ] || { echo "no jar: (cd java-benchmark && mvn -q -DskipTests clean package)"; exit 1; }
 
 if [ "${LOCAL:-0}" = "1" ]; then
-  source ./scale_ensemble.sh >/dev/null 2>&1; set +e +u +o pipefail
+  source ./scripts/scale_ensemble.sh >/dev/null 2>&1; set +e +u +o pipefail
   stop_ensemble >/dev/null 2>&1; start_ensemble "$ENSEMBLE_SIZE" >/dev/null 2>&1; wait_ensemble "$ENSEMBLE_SIZE" 90 >/dev/null 2>&1
   HOSTS=""; for ((i=0;i<ENSEMBLE_SIZE;i++)); do HOSTS+="127.0.0.1:$((2181+i)),"; done; HOSTS="${HOSTS%,}"
 fi

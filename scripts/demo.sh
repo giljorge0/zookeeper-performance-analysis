@@ -5,8 +5,8 @@
 #   3. generates the 2^(6-1) plan of the Stage II experiment (local stand-in for the log disk) and runs its first 3 runs
 #   4. validates the design/analysis code on synthetic data with known effects
 # Host ports used: 2181-2185 (clients) and 18081-18083 (AdminServer; ZK_ADMIN_BASE_PORT moves them).
-cd "$(dirname "$0")"
-source ./scale_ensemble.sh >/dev/null 2>&1
+cd "$(dirname "$0")/.."   # repository root
+source ./scripts/scale_ensemble.sh >/dev/null 2>&1
 set +e +u +o pipefail
 for c in docker java mvn python3; do command -v $c >/dev/null || { echo "missing: $c"; exit 1; }; done
 JAR="$(ls java-benchmark/target/*.jar 2>/dev/null | grep -v original | head -1)"
