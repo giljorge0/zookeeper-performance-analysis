@@ -74,7 +74,7 @@ ARGS=(); for d in ebpf_results_gce/fsync_*; do [ -d "$d" ] && ARGS+=("$(basename
 $PY ebpf/summarize.py "${ARGS[@]}" --tex report/ebpf_summary.tex --json ebpf_results_gce/summary.json \
     --cdf report/ebpf_cdf.png | sed 's/^/  /'
 if ls -d ebpf_curve/n*/fsync_yes_ssd >/dev/null 2>&1; then
-  ARGS=(); for n in $(ls ebpf_curve | sed 's/^n//' | sort -n); do ARGS+=("n$n=ebpf_curve/n$n/fsync_yes_ssd"); done
+  ARGS=(); for n in $(ls ebpf_curve | grep -E '^n[0-9]+$' | sed 's/^n//' | sort -n); do ARGS+=("n$n=ebpf_curve/n$n/fsync_yes_ssd"); done
   $PY ebpf/summarize.py "${ARGS[@]}" --tex report/ebpf_curve.tex --json ebpf_curve/summary.json \
       --cdf report/ebpf_curve_cdf.png | tail -2 | sed 's/^/  /'
 fi

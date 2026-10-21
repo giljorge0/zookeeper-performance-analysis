@@ -47,7 +47,10 @@ LATENCY = [
 ]
 BATCH = ("sync_processor_batch_size", "requests per fsync")
 ALL_SERVERS = ["fsynctime", "sync_processor_batch_size", "sync_processor_queue_and_flush_time_ms"]
-POOLED = ["updatelatency"]   # recorded by whichever server the client is connected to: pool every server
+POOLED = ["updatelatency"]
+# the plot keeps five of the timers (the table has all of them)
+PLOTTED = ["prep_processor_queue_time_ms", "sync_processor_queue_and_flush_time_ms", "quorum_ack_latency",
+           "local_write_committed_time_ms", "updatelatency"]   # recorded by whichever server the client is connected to: pool every server
 
 
 def parse_mntr(text):
@@ -193,6 +196,8 @@ def plot(path, agg):
     ns = [r["clients"] for r in agg]
     fig, ax = plt.subplots(1, 2, figsize=(8, 3.6))
     for metric, label in LATENCY:
+        if metric not in PLOTTED:
+            continue
         pts = [(n, r[metric]) for n, r in zip(ns, agg) if r[metric] is not None]
         if pts:
             ax[0].plot(*zip(*pts), "o-", ms=3, label=label)
