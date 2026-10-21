@@ -128,7 +128,7 @@ In Stage I the same configuration (3 servers, 20 clients, 30\% writes) gave 6{,}
   \input{design_factors.tex}
 \end{table}
 
-\paragraph{Design.} We use the half fraction $2^{6-1}$ with $F=ABCDE$ (defining relation $I=ABCDEF$)~\cite{jain_book}. It has resolution VI: main effects are aliased with five-factor interactions and two-factor interactions with four-factor ones, so all six main effects and fifteen two-factor interactions are estimated from 32 runs per replicate if interactions of order four and higher are negligible. A quarter fraction would have resolution IV and alias two-factor interactions in pairs, which is where hypotheses H2--H4 sit. Table~\ref{tab:sign} is the sign table: the full $2^5$ table of A--E with $F$ as the product of the other five columns. Two replicates give 64 runs and 32 degrees of freedom for error, which is what the credit allowed. With the measured error this gives intervals of $\pm0.015$ on each $\log_{10}$ effect, so a change of about 7\% between levels is detectable.
+\paragraph{Design.} We use the half fraction $2^{6-1}$ with $F=ABCDE$ (defining relation $I=ABCDEF$)~\cite{jain_book}. It has resolution VI: main effects are aliased with five-factor interactions and two-factor interactions with four-factor ones, so all six main effects and fifteen two-factor interactions are estimated from 32 runs per replicate if interactions of order four and higher are negligible. A quarter fraction would have resolution IV and alias two-factor interactions in pairs, which is exactly what three of our hypotheses (H2--H4, listed below) are about. Table~\ref{tab:sign} is the sign table: the full $2^5$ table of A--E with $F$ as the product of the other five columns. Two replicates give 64 runs and 32 degrees of freedom for error, which is what the credit allowed. With the measured error this gives intervals of $\pm0.015$ on each $\log_{10}$ effect, so a change of about 7\% between levels is detectable.
 
 \begin{table}[t]
   \centering
@@ -286,7 +286,7 @@ Four probes are our own bpftrace programs~\cite{gregg_bpf} and one is bcc's \tex
 
 Within the levels we tested, what clients do matters more than how the servers are configured: the share of writes and the load explain most of the throughput variation, the log disk none, and \texttt{fsync} only through its interaction with load. With writes the scalability curves show contention but no crosstalk, and the contention does not change between 30 and 50\% writes. Near saturation the leader's CPU accounts for the bottleneck the fit implies.
 
-\emph{Limitations.} Scalability was measured against load only, with three servers; the number of servers is a two-level factor. The leader's session share was not recorded in the factorial runs, the followers were not probed, and the 20\,s windows were not checked for steady state. One zone, shared 2-vCPU hosts, two disk types that turned out alike, no creates or watches.
+\emph{Limitations.} Scalability was measured against load only, with three servers; the number of servers is a two-level factor. The leader's session share was not recorded in the factorial runs, the followers were not probed, and the 20\,s windows were not checked for steady state. The servers shared hosts in one zone, the two disk types turned out alike, and the workload has no creates or watches.
 
 \begin{thebibliography}{10}
 
