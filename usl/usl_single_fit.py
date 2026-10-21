@@ -210,8 +210,8 @@ def main():
         mean = [np.mean(d[l]) for l in levels]
         sd = [np.std(d[l], ddof=1) if len(d[l]) > 1 else 0 for l in levels]
         plt.errorbar(levels, mean, yerr=sd, fmt="o", color="black", capsize=3, label="mean \u00b1 1 sd")
-        plt.plot(grid, usl(grid, *p), color="tab:blue", label=f"USL (\u03b1={p[1]:.3f}, \u03b2={p[2]:.1e})")
-        plt.plot(grid, amdahl(grid, *pa), "--", color="tab:orange", label=f"Amdahl (\u03b1={pa[1]:.3f})")
+        plt.plot(grid, usl(grid, *p), color="tab:blue", label=f"USL (\u03c3={p[1]:.3f}, \u03ba={p[2]:.1e})")
+        plt.plot(grid, amdahl(grid, *pa), "--", color="tab:orange", label=f"Amdahl (\u03c3={pa[1]:.3f})")
         if math.isfinite(nmax) and nmax < grid[-1]:
             plt.axvline(nmax, ls=":", color="gray")
         if cut:

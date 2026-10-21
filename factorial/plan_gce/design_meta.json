@@ -23,7 +23,7 @@
       "param": "clients",
       "low": 10,
       "high": 160,
-      "why": "below the saturation knee vs well beyond it",
+      "why": "light load vs well into saturation",
       "letter": "C"
     },
     {

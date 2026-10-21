@@ -1,0 +1,8 @@
+=== throughput_ops_sec (log10): 16 blocks, whole-plot error df=7
+A: q=+0.0291  95% CI [+0.0175, +0.0407]  (x1.14)  significant: yes
+D: q=+0.0147  95% CI [+0.0031, +0.0263]  (x1.07)  significant: yes
+F: q=-0.0068  95% CI [-0.0184, +0.0048]  (x0.97)  significant: no
+=== write_p99_ms (log10): 16 blocks, whole-plot error df=7
+A: q=+0.0215  95% CI [+0.0138, +0.0291]  (x1.10)  significant: yes
+D: q=-0.0421  95% CI [-0.0498, -0.0344]  (x0.82)  significant: yes
+F: q=+0.0041  95% CI [-0.0035, +0.0118]  (x1.02)  significant: no

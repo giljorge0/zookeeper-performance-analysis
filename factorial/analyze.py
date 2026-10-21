@@ -36,6 +36,15 @@ try:
 except ImportError:
     plt = None
 
+# names used on figure axes and in the report tables
+LABELS = {"ensemble_size": "number of servers", "write_ratio": "write ratio", "clients": "clients",
+          "force_sync": "forceSync", "payload_bytes": "payload (bytes)", "log_disk": "log disk",
+          "throughput_ops_sec": "throughput (ops/s)", "write_p99_ms": "write p99 latency (ms)"}
+
+
+def label(name):
+    return LABELS.get(name, name.replace("_", " "))
+
 
 def tcrit(df, alpha=0.05):
     if sps is not None:
@@ -145,12 +154,12 @@ def write_outputs(res, outdir, resp, names, log10, topk):
         fh.write(f"Error & & & & {res['pct_err']:.1f} \\\\\n\\bottomrule\n\\end{{tabular}}\n")
     if plt is None:
         return
-    top = res["eff"][:12]
+    top = res["eff"][:10]
     plt.figure(figsize=(7, 4))
-    plt.barh([e["word"] + ("" if e["sig"] else " (n.s.)") for e in reversed(top)],
+    plt.barh([e["label"] + ("" if e["sig"] else " (n.s.)") for e in reversed(top)],
              [e["pct"] for e in reversed(top)], color=["tab:blue" if e["sig"] else "lightgray" for e in reversed(top)])
-    plt.xlabel("% of total variation" + (" (log10 response)" if log10 else ""))
-    plt.title(f"Allocation of variation: {resp}")
+    plt.xlabel("% of total variation" + (" (log10 of the response)" if log10 else ""))
+    plt.title(f"Allocation of variation: {label(resp)}")
     plt.tight_layout()
     plt.savefig(os.path.join(outdir, f"pareto_{resp}.png"), dpi=170)
     plt.close()

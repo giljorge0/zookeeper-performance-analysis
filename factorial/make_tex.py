@@ -15,6 +15,8 @@ import json
 import os
 from collections import defaultdict
 
+from analyze import label
+
 
 def tex(s):
     return str(s).replace("_", "\\_").replace("%", "\\%").replace("&", "\\&")
@@ -36,7 +38,7 @@ def main():
         fh.write("\\begin{tabularx}{\\linewidth}{@{}cllll>{\\raggedright\\arraybackslash}X@{}}\n\\toprule\n"
                  "& Factor & $-1$ & $+1$ & Hard & Why \\\\\n\\midrule\n")
         for f in F:
-            fh.write(f"{f['letter']} & {tex(f['name'].replace('_', ' '))} & {tex(f['low'])} & {tex(f['high'])} & "
+            fh.write(f"{f['letter']} & {tex(label(f['name']))} & {tex(f['low'])} & {tex(f['high'])} & "
                      f"{'yes' if f.get('hard') else ''} & {tex(f.get('why', ''))} \\\\\n")
         fh.write("\\bottomrule\n\\end{tabularx}\n")
 
@@ -74,12 +76,23 @@ def main():
     first = {}
     for p in plan:
         first.setdefault(int(p["std_run"]), p)
+    # two halves side by side (runs 1-16 | 17-32), so the table fits in the body of the report
+    runs = sorted(first)
+    half = -(-len(runs) // 2)
+    head = "Run & " + " & ".join(letters) + (" & $\\bar y$" if means else "")
+    ncol = 1 + len(letters) + (1 if means else 0)
+
+    def cells(k):
+        row = " & ".join("$+$" if int(first[k][l]) == 1 else "$-$" for l in letters)
+        return f"{k} & {row}" + (f" & {means[k]:.0f}" if k in means else (" & --" if means else ""))
+
     with open(os.path.join(a.outdir, "design_signtable.tex"), "w") as fh:
-        fh.write("\\begin{tabular}{@{}r" + "c" * len(letters) + ("r" if means else "") + "@{}}\n\\toprule\n")
-        fh.write("Run & " + " & ".join(letters) + (f" & {tex(a.response)}" if means else "") + " \\\\\n\\midrule\n")
-        for k in sorted(first):
-            row = " & ".join("$+$" if int(first[k][l]) == 1 else "$-$" for l in letters)
-            fh.write(f"{k} & {row}" + (f" & {means[k]:.0f}" if k in means else (" & --" if means else "")) + " \\\\\n")
+        spec = "r" + "c" * len(letters) + ("r" if means else "")
+        fh.write("\\begin{tabular}{@{}" + spec + "@{\\qquad}" + spec + "@{}}\n\\toprule\n")
+        fh.write(head + " & " + head + " \\\\\n\\midrule\n")
+        for i in range(half):
+            right = cells(runs[i + half]) if i + half < len(runs) else " & ".join([""] * ncol)
+            fh.write(cells(runs[i]) + " & " + right + " \\\\\n")
         fh.write("\\bottomrule\n\\end{tabular}\n")
     print(f"wrote design_factors.tex, design_alias.tex, design_signtable.tex in {a.outdir}")
 
