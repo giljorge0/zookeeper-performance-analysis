@@ -75,7 +75,7 @@ Inside the leader, a write passes a chain of processors. Request preparation, a 
 \section{Stage I}
 \label{sec:stage1}
 
-In Stage I the same configuration (3 servers, 20 clients, 30\% writes) gave 6{,}364 ops/s in the sweep and 14{,}832 ops/s when we repeated it later. The jar used for the sweep bundled Logback, and its default configuration logs the ZooKeeper client at DEBUG level. It printed about 145{,}000 lines in a 15\,s run, more than one per operation, and every client thread ended up waiting on the console. A one-line Logback configuration fixes this, and the runner now aborts any run in which the client prints more than a few lines. Those fits had given the same contention coefficient ($\approx0.23$) for 1, 3 and 5 servers, and we had concluded that the contention was on the server side but not caused by Zab. A bottleneck in the client gives exactly that picture, because it does not depend on the number of servers. With the quiet client the coefficient became 0.025, 0.088 and 0.112 for 1, 3 and 5 servers. On the laptop all servers shared one CPU, so every extra server added load to the same machine, which is not the case with separate cloud machines. Repetitions of one variant on the laptop also differed by up to a factor of two. For these reasons Stage II uses separate machines for client and servers, replicates and a randomized order. The Stage I experiments we did not repeat (YCSB, leader failover, injected network delay) are summarized in Appendix~\ref{app:stage1} as context only.
+In Stage I the same configuration (3 servers, 20 clients, 30\% writes) gave 6{,}364 ops/s in the sweep and 14{,}832 ops/s when we repeated it later. The jar used for the sweep bundled Logback, and its default configuration logs the ZooKeeper client at DEBUG level. It printed about 145{,}000 lines in a 15\,s run, more than one per operation, and every client thread ended up waiting on the console. A one-line Logback configuration fixes this, and the runner now aborts any run in which the client prints more than a few lines. Those fits had given the same contention coefficient ($\approx0.23$) for 1, 3 and 5 servers, and we had concluded that the contention was on the server side but not caused by Zab. A bottleneck in the client gives exactly that picture, because it does not depend on the number of servers. With the quiet client the coefficient became 0.025, 0.088 and 0.112 for 1, 3 and 5 servers. On the laptop all servers shared one CPU, so every extra server added load to the same machine, which is not the case with separate cloud machines. Repetitions of one variant on the laptop also differed by up to a factor of two. For these reasons Stage II uses separate machines for client and servers, replicates and a randomized order. The Stage I experiments we did not repeat (YCSB, leader failover, injected network delay) are not used here.
 
 \section{Testbed and Methodology}
 \label{sec:method}
@@ -335,61 +335,9 @@ B.~Gregg.
 \newblock \emph{BPF Performance Tools}.
 \newblock Addison-Wesley, 2019.
 
-\bibitem{ycsb}
-B.~F. Cooper, A.~Silberstein, E.~Tam, R.~Ramakrishnan, and R.~Sears.
-\newblock Benchmarking cloud serving systems with YCSB.
-\newblock In \emph{ACM Symposium on Cloud Computing (SoCC)}, 2010.
-
-\bibitem{pumba}
-A.~Ledenev.
-\newblock Pumba: chaos testing and network emulation for Docker containers.
-\newblock \url{https://github.com/alexei-led/pumba}.
-
 \end{thebibliography}
 
 \appendix
-
-\section{Stage I experiments not repeated in Stage II}
-\label{app:stage1}
-
-These runs were made on the Stage I laptop with the servers in Docker containers, one run per cell and no confidence intervals. They come from a different testbed and are kept only as context.
-
-\paragraph{YCSB.} We ran YCSB~\cite{ycsb} with its ZooKeeper binding on 3 servers (Table~\ref{tab:ycsb}). At 16 threads the read-heavy workloads B and C reach about 6.7 times the throughput of the 50/50 workload A, and in A an update takes 3--4.5 times as long as a read on average (3{,}713 against 1{,}078\,$\mu$s). B and C peak at 16 threads. Workload A jumps from 1{,}723 to 5{,}964 ops/s between 16 and 32 threads; with a single run per cell we cannot tell whether this is a real effect or noise, warm-up or garbage collection.
-
-\begin{table}[H]
-  \centering
-  \caption{YCSB throughput (ops/s), Stage I laptop, 3 servers, one run per cell.}
-  \label{tab:ycsb}
-  \scriptsize
-  \begin{tabular}{@{}lrrrr@{}}
-    \toprule
-    Workload & 1 thread & 4 & 16 & 32 \\
-    \midrule
-    A (50/50 read/update) & 790  & 1316 & 1723  & 5964 \\
-    B (95/5)              & 3544 & 6927 & 11436 & 8080 \\
-    C (100\% read)        & 4538 & 9074 & 11913 & 8900 \\
-    \bottomrule
-  \end{tabular}
-\end{table}
-
-\paragraph{Leader failover.} During a continuous benchmark on 3 servers we found the leader with \texttt{stat} and killed its container. The two survivors kept a majority and continued, and ZooKeeper logged an election of 211\,ms (216 and 235\,ms in a repetition). This is ZooKeeper's measurement of the election only, not the outage seen by clients.
-
-\paragraph{Network delay.} We added 20$\pm$2\,ms to the egress of every server container with Pumba~\cite{pumba} (which drives \texttt{tc netem} inside each container's network namespace) and repeated the sweep with the quiet client (Table~\ref{tab:chaos}). Throughput per client stays at about 21.5 ops/s, one operation per 46.5\,ms, at every load: the clients wait on the delay and the servers never saturate within 80 clients. The median read took 22.7\,ms (one delayed hop) and the median write 106\,ms (about five: forward, proposal, acknowledgment, commit, reply), as Fig.~\ref{fig:pipeline} predicts for a client attached to a follower.
-
-\begin{table}[H]
-  \centering
-  \caption{Throughput (ops/s) with and without a 20\,ms egress delay, Stage I laptop, 3 servers, one run per cell.}
-  \label{tab:chaos}
-  \scriptsize
-  \begin{tabular}{@{}lrrrrrr@{}}
-    \toprule
-    Clients & 1 & 5 & 10 & 20 & 40 & 80 \\
-    \midrule
-    No delay      & 2386 & 7016 & 11680 & 14832 & 16238 & 16255 \\
-    20\,ms delay  & 20.6 & 108.9 & 216.7 & 434.6 & 865.5 & 1709 \\
-    \bottomrule
-  \end{tabular}
-\end{table}
 
 \section{All effects of the factorial experiment}
 \label{app:effects}
