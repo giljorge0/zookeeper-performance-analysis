@@ -281,6 +281,9 @@ def short_label(r):
 def combined_table(path, res):
     """One table, configurations as columns: throughput, ZooKeeper's counters, fsync calls and CPU per thread."""
     rs = list(res.values())
+    # along a curve every run has the same forceSync and disk: label the columns by the number of clients
+    by_n = len({short_label(r) for r in rs}) == 1 and len({r["config"].get("clients") for r in rs}) > 1
+    label = (lambda r: f"$N={r['config'].get('clients')}$") if by_n else short_label
     rows = [("ops/s with probes", [fmt(r["throughput"], 0) for r in rs]),
             ("ops/s without (mean of 2)", [fmt(r["throughput_noprobe"], 0) for r in rs]),
             ("fsync calls (eBPF)", [fmt(r["fsync_calls"], 0) for r in rs]),
@@ -298,7 +301,8 @@ def combined_table(path, res):
     cpu.append(("whole JVM", [fmt(r["jvm_cores"], 2) for r in rs]))
     with open(path, "w") as fh:
         fh.write("\\begin{tabular}{@{}l" + "r" * len(rs) + "@{}}\n\\toprule\n")
-        fh.write("\\texttt{forceSync}, log disk & " + " & ".join(short_label(r) for r in rs) + " \\\\\n\\midrule\n")
+        head = "clients" if by_n else "\\texttt{forceSync}, log disk"
+        fh.write(head + " & " + " & ".join(label(r) for r in rs) + " \\\\\n\\midrule\n")
         for name, vals in rows:
             fh.write(name + " & " + " & ".join(vals) + " \\\\\n")
         fh.write("\\midrule\n\\multicolumn{" + str(len(rs) + 1) + "}{@{}l}{\\emph{CPU of the leader (cores of 2)}} \\\\\n")
@@ -313,7 +317,9 @@ def cdf_plot(path, res):
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     fig, ax = plt.subplots(1, 2, figsize=(7.0, 2.7), sharey=True)
-    for i, r in enumerate(res.values()):
+    rs = list(res.values())
+    by_n = len({short_label(r) for r in rs}) == 1 and len({r["config"].get("clients") for r in rs}) > 1
+    for i, r in enumerate(rs):
         for a_, key in ((ax[0], "fsync_buckets"), (ax[1], "bio_buckets")):
             b = sorted(r[key])
             total = sum(c for _, _, c in b)
@@ -324,7 +330,8 @@ def cdf_plot(path, res):
                 acc += c
                 xs.append(hi)
                 ys.append(acc / total)
-            a_.plot(xs, ys, "o-", ms=3, color=f"C{i}", label=short_label(r))
+            a_.plot(xs, ys, "o-", ms=3, color=f"C{i}",
+                    label=f"N={r['config'].get('clients')}" if by_n else short_label(r))
     for a_, title in ((ax[0], "fsync of the transaction log"), (ax[1], "block I/O on the log disk")):
         a_.set_xscale("log", base=2)
         a_.set_xlabel("latency ($\\mu$s, upper bucket bound)", fontsize=9)
@@ -332,7 +339,7 @@ def cdf_plot(path, res):
         a_.grid(alpha=0.3)
         a_.tick_params(labelsize=8)
     ax[0].set_ylabel("fraction of calls", fontsize=9)
-    ax[1].legend(fontsize=8, title="forceSync, disk", title_fontsize=8)
+    ax[1].legend(fontsize=8, title="clients" if by_n else "forceSync, disk", title_fontsize=8)
     fig.tight_layout()
     fig.savefig(path, dpi=200)
     plt.close(fig)

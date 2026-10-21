@@ -1,0 +1,14 @@
+probing PID 4245 for 45s -> /tmp/probe_out
+done:
+total 28
+-rw-r--r-- 1 root root 1253 Oct 21 18:37 disk_latency.txt
+-rw-r--r-- 1 root root  511 Oct 21 18:37 fsync_latency.txt
+-rw-r--r-- 1 root root  146 Oct 21 18:36 meta.txt
+-rw-r--r-- 1 root root 1205 Oct 21 18:37 runqlat.txt
+-rw-r--r-- 1 root root  956 Oct 21 18:37 tcp_retrans.txt
+-rw-r--r-- 1 root root  986 Oct 21 18:36 thread_names.txt
+-rw-r--r-- 1 root root  424 Oct 21 18:37 zk_threads.txt
+--- fsync summary ---
+@fsync_calls: 15719
+@fsync_max_us: 5576
+@fsync_total_us: 8655648

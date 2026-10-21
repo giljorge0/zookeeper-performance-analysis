@@ -1,0 +1,27 @@
+data: 39 observations, 13 N levels, replicates per level 3-3
+
+=== USL fit (relative-error weighted) ===
+gamma =   4890.5   95% CI [4782.3, 4992.9]
+alpha =   0.0285   95% CI [0.0269, 0.0301]
+beta  = 3.95e-05   95% CI [3.19e-05, 4.73e-05]   (bootstrap fits with beta~0: 0%)
+N_max =    156.8   95% CI [143.5, 174.3]
+X_max =   119611   95% CI [118435, 120980]
+R^2 = 0.9980   mean abs. relative error = 2.5%
+
+=== Is beta justified? (USL vs Amdahl) ===
+Amdahl: gamma=5010.0 alpha=0.0334   AIC USL -260.3 vs Amdahl -242.4   F-test p = 0.0000
+verdict: beta justified (USL preferred)
+
+=== Linearization check (y/(N-1) = alpha + beta N) ===
+alpha=0.0415  beta=-7.90e-05   (compare with NLS above)
+
+=== Hold-out: fit on N <= 64, predict the rest ===
+N=   96  observed   113548  predicted   105067  error  -7.5%
+N=  128  observed   118302  predicted   102025  error -13.8%
+N=  160  observed   122321  predicted    97121  error -20.6%
+hold-out mean abs. error: 13.9%
+
+=== Coverage checks ===
+WARNING: fewer than 2 N levels beyond the predicted peak: beta is weakly constrained
+
+wrote usl/out_wr00/usl_single_fit.json|.tex|.png

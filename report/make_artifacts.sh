@@ -54,8 +54,28 @@ grep "max abs" usl/out/latency_model.txt | sed 's/^/  /'
 cp usl/out/usl_single_fit.png usl/out/stage_breakdown.png report/
 echo "  max client CPU in the sweep: $(sort -t, -k3 -n usl/usl_client_cpu.csv | tail -1)"
 
+echo "== extra USL curves, sessions, fio"
+for wr in 00 05; do
+  [ -f "usl/usl_wr$wr.csv" ] || continue
+  mkdir -p "usl/out_wr$wr"
+  $PY usl/usl_single_fit.py --input "usl/usl_wr$wr.csv" --ensemble-size 3 --outdir "usl/out_wr$wr" > "usl/out_wr$wr/fit_summary.txt"
+  $PY usl/stage_breakdown.py --mntr "usl/mntr_wr$wr" --outdir "usl/out_wr$wr" --tex "usl/out_wr$wr/stage_breakdown.tex" >/dev/null
+done
+if [ -f usl/usl_wr05.csv ]; then
+  C=(); [ -f usl/usl_wr00.csv ] && C+=(0.0=usl/usl_wr00.csv:usl/out_wr00)
+  C+=(0.3=usl/usl_single.csv:usl/out 0.5=usl/usl_wr05.csv:usl/out_wr05)
+  $PY usl/usl_compare.py "${C[@]}" --tex report/usl_compare.tex --png report/usl_compare.png | sed 's/^/  /'
+  $PY usl/sessions.py usl/mntr_wr* | sed 's/^/  /'
+fi
+[ -f fio_results/fio_log_disks.json ] && $PY gce/fio_summary.py fio_results/fio_log_disks.json | sed 's/^/  /'
+
 echo "== eBPF"
 ARGS=(); for d in ebpf_results_gce/fsync_*; do [ -d "$d" ] && ARGS+=("$(basename "$d")=$d"); done
 $PY ebpf/summarize.py "${ARGS[@]}" --tex report/ebpf_summary.tex --json ebpf_results_gce/summary.json \
     --cdf report/ebpf_cdf.png | sed 's/^/  /'
+if ls -d ebpf_curve/n*/fsync_yes_ssd >/dev/null 2>&1; then
+  ARGS=(); for n in $(ls ebpf_curve | sed 's/^n//' | sort -n); do ARGS+=("n$n=ebpf_curve/n$n/fsync_yes_ssd"); done
+  $PY ebpf/summarize.py "${ARGS[@]}" --tex report/ebpf_curve.tex --json ebpf_curve/summary.json \
+      --cdf report/ebpf_curve_cdf.png | tail -2 | sed 's/^/  /'
+fi
 echo "done: report/*.tex and report/*.png are up to date; compile report/report.tex"

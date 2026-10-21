@@ -30,12 +30,12 @@
 
 \begin{abstract}
 ZooKeeper answers reads at any server but sends every write through one leader and a quorum. We study the cost of
-that write pipeline on Google Compute Engine with a $2^{6-1}$ factorial experiment (two replicates), one replicated
-Universal Scalability Law curve and five eBPF probes. The write ratio explains 60\% of the variation of $\log_{10}$
+that write pipeline on Google Compute Engine with a $2^{6-1}$ factorial experiment (two replicates), replicated
+Universal Scalability Law curves at 0, 30 and 50\% writes, and five eBPF probes. The write ratio explains 60\% of the variation of $\log_{10}$
 throughput and the number of clients 94\% of the variation of $\log_{10}$ write tail latency. Turning \texttt{fsync} off
-helps at light load (+39\%) and hurts at saturation ($-17\%$). The curve needs only a contention term ($\sigma=0.039$).
-The utilization law and a CPU profile of the leader agree with the leader's two vCPUs being the bottleneck; the log
-disk is not. We also report a client-side logging artifact that had distorted the Stage I fits.
+helps at light load (+39\%) and hurts at saturation ($-17\%$). With writes the curves need only a contention term ($\sigma\approx0.038$); more writes lower the
+single-client throughput, not the serialized share. The CPU the leader spends per operation, measured along the curve,
+matches the bottleneck demand the fit implies: the leader's two vCPUs are the bottleneck, and the log disk is not. We also report a client-side logging artifact that had distorted the Stage I fits.
 \end{abstract}
 
 \noindent\textbf{Git Commit Identifier:} \texttt{9a52eabcfe0019b8ab4ac96fb7bb2195694d70a0}
@@ -140,8 +140,8 @@ measured with eBPF.
 
 \paragraph{Threats to validity.} The virtual machines share physical hosts with other tenants. Replicates and the
 random order spread that noise over all treatments: two replicates of the same factorial run differ by 11\% at the
-median and by up to 48\%. Sessions are placed on a random server, so the share of sessions on the leader varies between
-runs, most of all with 10 clients; we did not record it. One zone means short round trips between servers.
+median and by up to 48\%. Sessions are placed on a random server, so the leader's share of the sessions varies between
+runs: in the extra USL curves, where we recorded it, it averaged a third but ranged from 19\% to 44\% at 8--16 clients. One zone means short round trips between servers.
 \texttt{forceSync=no} is unsafe in production and serves only as a probe.
 
 \section{Experimental Design}
@@ -292,17 +292,15 @@ finds a longer queue at the leader. The other effects change it by at most a thi
 ratio ($\times1.21$), \texttt{forceSync} ($\times0.82$) and five servers ($\times1.10$, significant only in the whole-plot
 test). Reads stay fast: their median is 0.27\,ms at 10 clients and 0.68\,ms at 160.
 
-\paragraph{Pooled against whole-plot error.} The whole-plot intervals for A, D and F are narrower than the pooled
-ones. Had rebuilding the servers added variance, they would be wider, so rebuilds added none that we can detect. With
-only 7 degrees of freedom the whole-plot error is itself uncertain, so an effect significant in only one test is treated
-as borderline.
+\paragraph{Pooled against whole-plot error.} The whole-plot intervals are narrower than the pooled ones, so rebuilds
+added no detectable variance; with 7 degrees of freedom, an effect significant in only one test is borderline.
 
 \paragraph{Hypotheses.} \textbf{H1} holds only at light load: the main effect of D on throughput ($\times1.07$) is
 borderline and is dwarfed by C$\times$D, which changes its sign; D lowers the write p99 by 18\%. \textbf{H2} is rejected
 (B$\times$D, $\times1.04$, not significant). \textbf{H3} is rejected: neither F nor D$\times$F is detectable; since the two
 disks turned out to have almost the same latency (Section~\ref{sec:ebpf}), this says more about our levels than about
 ZooKeeper. \textbf{H4} is rejected for throughput (five servers are faster) and holds in part for the p99, which five
-servers raise with 10\% writes (7.4 to 9.6\,ms) and not with 50\% (A$\times$B, $\times0.85$). \textbf{H5} is rejected for
+servers raise with 10\% writes and not with 50\% (A$\times$B, $\times0.85$). \textbf{H5} is rejected for
 throughput, where the write ratio matters more, and holds for the write p99.
 
 \begin{figure}[t]
@@ -315,38 +313,54 @@ throughput, where the write ratio matters more, and holds for the write p99.
   \label{fig:pareto}
 \end{figure}
 
-\subsection{USL curve}
+\subsection{USL curves}
 \label{sec:usl}
 
-We measured one configuration (3 servers, 30\% writes, 128\,B) at 13 client counts from 1 to 160, with three replicates
-per level in random order. In the notation of the course,
+We measured one configuration (3 servers, 128\,B, \texttt{forceSync} on, pd-ssd) at three write ratios: 0, 30 and 50\%,
+each at 13 client counts from 1 to 160 with three replicates per level in random order. In the notation of the course,
 \begin{equation}
   X(N)=\frac{\lambda N}{1+\sigma(N-1)+\kappa N(N-1)},
 \end{equation}
 where $\lambda$ is the throughput of one client, $\sigma$ the contention (serial) coefficient and $\kappa$ the crosstalk
 (coherency) coefficient. The fit minimizes relative error, so that 3\% counts the same at 600 and at 6{,}000 ops/s. The
 intervals come from a bootstrap over the replicates. We compare the full model with the contention-only (Amdahl) model by
-AIC and an F-test, and validate it by fitting $N\le64$ and predicting the three highest loads.
+AIC and an F-test, and validate it by fitting $N\le64$ and predicting the three highest loads. The timers and probes below were recorded along the 30\% curve.
 
 \begin{figure}[t]
   \centering
-  \includegraphics[width=0.7\textwidth]{usl_single_fit.png}
-  \caption{Throughput against clients: runs, mean $\pm$ one standard deviation, the USL fit with its 95\% bootstrap band
-    and the Amdahl model. The shaded region was held out for validation.}
+  \includegraphics[width=0.62\textwidth]{usl_compare.png}
+  \caption{Throughput against clients at three write ratios (mean $\pm$ one standard deviation of three replicates)
+    with the chosen fit: USL at 0\% writes, Amdahl at 30 and 50\%.}
   \label{fig:usl}
 \end{figure}
 
-Throughput rises from 2{,}165 ops/s with one client to 46{,}436 ops/s with 160 (Fig.~\ref{fig:usl}); the client stayed
-below 28\% CPU. The fit gives $\lambda=2{,}082$ ops/s (95\% interval 1{,}996--2{,}169) and $\sigma=0.0385$
-(0.0345--0.0414). The crosstalk term is not supported: the Amdahl model has the lower AIC ($-241.4$ against $-239.5$),
-the F-test gives $p=0.72$, and 37\% of the bootstrap fits put $\kappa$ at zero. We therefore use the Amdahl fit
-($\lambda=2{,}088$, $\sigma=0.039$), which shows no retrograde region within 160 clients at 30\% writes. It bounds
-throughput by $\lambda/\sigma\approx53{,}500$ ops/s; at 160 clients the system delivers 87\% of that. The efficiency
-$X(N)/(N\lambda)$ falls to 0.74 at 10 clients and 0.13 at 160. Fitted on $N\le64$ only, the model predicts the throughput
-at 96, 128 and 160 clients within 1.9--5.1\%. With 50\% writes the picture may differ: the factorial runs at 160 clients,
-3 servers and 128\,B reached 19--21{,}000 ops/s, less than the 27--29{,}000 of the probe runs at 80 clients with the same
-configuration (Section~\ref{sec:ebpf}). The runs come from different sessions, so this only hints at a retrograde region for
-write-heavy loads.
+\begin{table}[t]
+  \centering
+  \caption{Fits of the three curves. For 30 and 50\% writes $\kappa$ is not supported and the Amdahl fit is shown;
+    intervals are 95\% bootstrap intervals.}
+  \label{tab:uslcompare}
+  \scriptsize
+  \input{usl_compare.tex}
+\end{table}
+
+\paragraph{30\% writes.} Throughput rises from 2{,}165 ops/s with one client to 46{,}436 ops/s with 160
+(Fig.~\ref{fig:usl}); the client stayed below 28\% CPU. The fit gives $\lambda=2{,}082$ ops/s (95\% interval
+1{,}996--2{,}169) and $\sigma=0.0385$ (0.0345--0.0414). The crosstalk term is not supported: the Amdahl model has the
+lower AIC ($-241.4$ against $-239.5$), the F-test gives $p=0.72$, and 37\% of the bootstrap fits put $\kappa$ at zero.
+The Amdahl fit ($\lambda=2{,}088$, $\sigma=0.039$) bounds throughput by $\lambda/\sigma\approx53{,}500$ ops/s; at 160
+clients the system delivers 87\% of that. The efficiency $X(N)/(N\lambda)$ falls to 0.74 at 10 clients and 0.13 at 160.
+Fitted on $N\le64$ only, the model predicts 96, 128 and 160 clients within 1.9--5.1\%.
+
+\paragraph{50\% writes.} $\lambda$ drops to 1{,}426 ops/s while $\sigma$ stays at 0.037 (0.036--0.039), inside the
+interval of the 30\% curve; $\kappa$ is again not supported ($p=1.0$) and the hold-out error is 4.1\%. More writes make
+every request more expensive but leave the serialized share of the work unchanged, so the ceiling $\lambda/\sigma$ falls
+from 53{,}500 to 38{,}200 ops/s. The curve keeps rising to 33{,}418 ops/s at 160 clients: no retrograde region.
+
+\paragraph{0\% writes.} Reads alone reach 122{,}321 ops/s, with $\lambda=4{,}891$ and $\sigma=0.029$. Here the
+crosstalk term is supported (AIC $-260.3$ against $-242.4$, $p<0.001$), with the peak $N_{\max}\approx157$ at the edge
+of the range, and a fit on $N\le64$ misses 160 clients by 21\%. But the curve has not turned down, and
+from 64 clients on the load generator was 59--70\% busy, near the 70\% at which we stop trusting it, so we do not claim
+a retrograde region.
 
 \paragraph{Response time.} Combining the Amdahl fit with Little's law for a closed loop without think time gives
 \begin{equation}
@@ -357,8 +371,8 @@ client only adds waiting time. It agrees with the measured mean $N/X$ within 3.7
 the throughput fit implies, and lies between the measured median and 95th percentile. At 160 clients reads had a median
 of 1.5\,ms and a p99 of 7.2\,ms, writes 6.3 and 13.6\,ms.
 
-\paragraph{Per-stage times.} Table~\ref{tab:stages} gives ZooKeeper's timers on the leader at four of the 13 levels
-(all levels: Fig.~\ref{fig:stages}). The intervals overlap and do not add up: the time to quorum acknowledgment starts
+\paragraph{Per-stage times.} ZooKeeper's timers on the leader along the 30\% curve are in Appendix~\ref{app:stages}
+(Table~\ref{tab:stages}, Fig.~\ref{fig:stages}). The intervals overlap and do not add up: the time to quorum acknowledgment starts
 when the proposal is created and includes the leader's own log sync and the followers' round trip. From 1 to 160 clients
 the server-side write latency grows from 0.87 to 5.57\,ms. The time to quorum acknowledgment grows most in absolute
 terms ($+2.07$\,ms), followed by the queue in front of request preparation ($+1.35$\,ms, most of it beyond 64 clients) and
@@ -369,14 +383,6 @@ resolve them. Reads show the same hot spot. A read served
 by the leader takes 2.79\,ms at 160 clients against 0.97\,ms averaged over all servers, and 1.48\,ms of it is spent
 waiting in the leader's commit stage.
 
-\begin{table}[t]
-  \centering
-  \caption{Leader per-stage times (ms, mean of the replicates) and requests per \texttt{fsync}; the write latency is pooled
-    over all servers. 1\,ms timer resolution.}
-  \label{tab:stages}
-  \scriptsize
-  \input{stage_breakdown.tex}
-\end{table}
 
 \subsection{eBPF probes}
 \label{sec:ebpf}
@@ -385,9 +391,10 @@ Four probes are our own bpftrace programs~\cite{gregg_bpf} and one is bcc's \tex
 latency of ZooKeeper's \texttt{fsync}/\texttt{fdatasync} calls (syscall tracepoints); the block-I/O latency per disk,
 from the block tracepoints (bcc's \texttt{biolatency} uses a kprobe that kernel 6.1 cannot trace); the run-queue latency
 of the JVM's threads; TCP retransmissions; and the CPU per thread (a 99\,Hz \texttt{profile} probe keyed by thread name;
-ZooKeeper names the thread of each stage). They ran on the leader in separate runs (3 servers, 80 clients, 50\% writes) at both levels of \texttt{forceSync} and log
-disk. Each probed run follows a discarded warm-up run and sits between two identical unprobed runs
-(Fig.~\ref{fig:cdf}, Table~\ref{tab:ebpfzk}).
+ZooKeeper names the thread of each stage). They ran on the leader in two sets of separate runs: along the 30\%
+curve at 1, 16, 64 and 160 clients (Table~\ref{tab:ebpfcurve}), and at 80 clients and 50\% writes at both levels of
+\texttt{forceSync} and log disk (Fig.~\ref{fig:cdf}, Appendix~\ref{app:probes}). Each probed run sits between two
+unprobed ones.
 
 \begin{figure}[t]
   \centering
@@ -399,31 +406,34 @@ disk. Each probed run follows a discarded warm-up run and sits between two ident
 
 \begin{table}[t]
   \centering
-  \caption{The probed runs: throughput, ZooKeeper's counters and the leader's CPU per thread.}
-  \label{tab:ebpfzk}
+  \caption{Probes along the 30\% curve: throughput, ZooKeeper's counters and the leader's CPU per thread.}
+  \label{tab:ebpfcurve}
   \scriptsize
-  \input{ebpf_summary_combined.tex}
+  \input{ebpf_curve_combined.tex}
 \end{table}
 
 \paragraph{The \texttt{fsync} and the disk.} With \texttt{forceSync=no} the probe sees no \texttt{fsync}, which confirms that
-factor D was applied. With it, an \texttt{fsync} takes 1.0\,ms on average on both disks, and its CDF has two steps: 21--27\%
+factor D was applied. Along the curve an \texttt{fsync} grows from 0.55\,ms at one client to 1.1\,ms at 160, as the
+batch grows from 1 to 18.5 requests. At 80 clients it takes 1.0\,ms on average on both disks, and its CDF has two steps: 21--27\%
 of the calls take 256--512\,$\mu$s and 68--75\% take 1--2\,ms. The block-I/O CDFs of the two disks almost coincide, with
 85--88\% of the requests in the 256--512\,$\mu$s bucket, so neither disk is faster, which agrees with F having no effect.
+A separate \texttt{fio} test (4\,KiB writes, an \texttt{fsync} after each) confirms it: 1.31\,ms per \texttt{fsync} on
+pd-balanced and 1.33\,ms on pd-ssd.
 There are about 2.7 block requests per \texttt{fsync}. An ext4 \texttt{fsync} that must also commit the journal waits for
 several device round trips in sequence (data, journal, cache flush); that would explain both the 1--2\,ms step and why an
 \texttt{fsync} costs more than a single device request, although we have not traced the journal. Without
 \texttt{fsync} the log disk sees only about 390 requests in 45\,s, mostly of 1--8\,ms: background write-back of dirty
 pages, merged into large requests, which no client request waits for.
 
-\paragraph{CPU, scheduler and network.} The leader's JVM uses 1.6--1.7 of its two vCPUs. The largest shares are
-replication to the followers (0.55--0.67 cores) and client connections (0.4); request preparation uses 0.20--0.25 and the
-log-sync thread 0.1. Garbage collection uses under 0.003 cores. The run-queue latency has a median of 15\,$\mu$s and a p99
-below 0.5\,ms, and there are no TCP retransmissions.
+\paragraph{CPU, scheduler and network.} Along the curve the leader's JVM goes from 0.52 cores at one client to 1.51 at
+64 and 1.70 at 160, of two. Replication to the followers (0.58 cores at 160) and client connections (0.43) take most of
+it; request preparation uses 0.25 and the log-sync thread 0.11, so no single thread is near a full core. The run-queue
+p99 grows from 63\,$\mu$s at one client to 511\,$\mu$s from 64 clients on, as the threads start to compete for the two
+cores. Garbage collection uses under 0.003 cores, and there are no TCP retransmissions.
 
-\paragraph{Noise in the probe runs.} The two unprobed runs around each probed run differed by 6--43\%, and the
-apparent probe overhead ranges from $-15\%$ to $+7\%$. That noise hides any overhead below about 15\% and the effect of
-\texttt{fsync} at this load (with probes, runs without it are 9\% faster; without probes, 4\% slower), so we use these
-runs only for call counts, latency distributions and CPU shares.
+\paragraph{Probe overhead.} Along the curve the probed runs are between 4\% slower and 7\% faster than the mean of
+their two unprobed neighbours, inside the spread between those neighbours (up to 17\%): the overhead is smaller than
+the run-to-run noise. The 80-client set was noisier (up to 43\%), so it is used only for counts, distributions and CPU shares.
 
 \section{Discussion: What Limits Scalability}
 \label{sec:discussion}
@@ -439,10 +449,10 @@ runs only for call counts, latency distributions and CPU shares.
     Term & Candidate stages & Evidence \\
     \midrule
     $\sigma$ & The leader's CPU: replication, client connections, ordering, log sync
-      & $\sigma=0.039$; demand 19\,$\mu$s/op, close to the CPU estimate; JVM at 1.6--1.7 of 2 cores; no thread near a full
-        core; D and F do not help at saturation \\
+      & $\sigma\approx0.038$ at 30 and 50\% writes; demand $2\sigma/\lambda=37\,\mu$s/op against 38--40 measured; JVM at
+        1.5--1.7 of 2 cores; no thread near a full core; D and F do not help at saturation \\
     $\kappa$ & Interference between pairs of clients (sessions, GC, commit waits)
-      & Not supported at 30\% writes ($p=0.72$); GC under 0.003 cores; possible at 50\% writes \\
+      & Not supported with writes ($p=0.72$, 1.0); GC under 0.003 cores; supported at 0\% writes, near client saturation \\
     $\lambda$ & One request alone: round trips, serialization, payload, \texttt{fsync}
       & 0.48\,ms per request; 4\,KiB payloads $\times0.74$; quorum ACK 0.72\,ms at $N=1$ \\
     Servers (A) & More followers per proposal vs.\ fewer sessions on the leader
@@ -451,38 +461,34 @@ runs only for call counts, latency distributions and CPU shares.
   \end{tabularx}
 \end{table}
 
-\paragraph{Contention ($\sigma$).} Table~\ref{tab:limits} maps the USL terms to the pipeline. The disk is not the bottleneck: an \texttt{fsync} costs about 1\,ms on either disk, group
-commit spreads it over up to 17 requests at high load, and neither D nor F raises throughput at saturation. No single
-thread is either, since none comes close to a full core. The utilization law points to the leader's CPU as a whole. In
-the Amdahl model the bottleneck limits throughput to $\lambda/\sigma\approx53{,}500$ ops/s, so its demand is
-$D=\sigma/\lambda\approx18.7\,\mu$s per operation, or $37\,\mu$s of CPU per operation if the bottleneck is the leader's
-two cores ($U=XD/2$). In the probe runs the leader's JVM used 1.6--1.7 cores at 26--29{,}000 ops/s, that is 59--61\,$\mu$s
-per operation at 50\% writes, a utilization of 0.80--0.86. Splitting those 60\,$\mu$s with the cost ratio $w\approx12r$
-gives $r\approx9\,\mu$s and $w\approx111\,\mu$s, so about $40\,\mu$s per operation at the 30\% writes of the curve. That
-puts the CPU bound at $2/40\,\mu\text{s}\approx50{,}000$ ops/s, within 7\% of the Amdahl bound. The comparison rests on
-two assumptions: the cost ratio measured for the whole system also holds for the leader, and the profile at 80 clients
-holds at 160. Short run-queue waits do not contradict it: threads get a CPU quickly when they wake, but every write adds work to
-the same two cores, and requests wait for it in the queues of request preparation and of the commit stage, which grow
-fastest at high load and make reads on the leader three times slower than average. Factor A agrees: moving sessions off
-the leader helps only at saturation.
+\paragraph{Contention ($\sigma$).} Table~\ref{tab:limits} maps the USL terms to the pipeline. The disk is not the
+bottleneck: an \texttt{fsync} costs about 1\,ms on either disk, group commit spreads it over up to 18 requests at high
+load, and neither D nor F raises throughput at saturation. No single thread is either, since none comes close to a full
+core. The utilization law points to the leader's CPU as a whole. In the Amdahl model the bottleneck limits throughput
+to $\lambda/\sigma\approx53{,}500$ ops/s, so its demand is $D=\sigma/\lambda\approx18.7\,\mu$s per operation, or
+$37\,\mu$s of CPU per operation if the bottleneck is the leader's two cores ($U=XD/2$). The probes along the same curve
+measure that quantity directly: the leader used 1.51 cores at 37{,}239 ops/s (64 clients) and 1.70 cores at 44{,}450 ops/s
+(160 clients), that is 40.4 and 38.3\,$\mu$s of CPU per operation and a utilization of 0.76--0.85. The same holds at 50\%
+writes: about 60\,$\mu$s per operation in the 80-client probe runs caps two cores at 33{,}000 ops/s, and the 50\% curve
+reaches 33{,}418 at 160 clients. The run-queue p99 grows eightfold once the cores are busy, and
+requests wait for the shared CPU in the queues of request preparation and of the commit stage, which make reads on the
+leader three times slower than average. Factor A agrees: moving sessions off the leader helps only at saturation.
 
-\paragraph{Mitigations.} The useful changes relieve the leader's CPU: a larger leader machine, a leader that
-accepts no clients (\texttt{leaderServes=no})~\cite{zookeeper_admin}, observers for reads, and multi-operations, which
-spread the
-replication work as group commit spreads the \texttt{fsync}. A faster log disk would not help, and turning \texttt{fsync}
-off costs throughput at high load as well as durability.
+\paragraph{Mitigations.} Relieve the leader's CPU: a larger machine for it, a leader that takes no clients
+(\texttt{leaderServes=no})~\cite{zookeeper_admin}, observers for reads, and multi-operations. A faster log disk would not help, and turning \texttt{fsync} off costs
+throughput at high load as well as durability.
 
 \section{Conclusion}
 
 The workload decides ZooKeeper's throughput more than the configuration: the write share explains 60\% of the
 variation of $\log_{10}$ throughput and the load 26\%, the log disk nothing, and \texttt{fsync} matters only through its
-interaction with load. The load explains 94\% of the write tail latency. The curve at 30\% writes needs only contention
-($\sigma=0.039$), and the utilization law and the CPU profile agree within 7\% with the leader's two vCPUs being the
-contended resource. Without validating the load generator, the Stage I artifact would have been reported as a property of ZooKeeper.
+interaction with load. The load explains 94\% of the write tail latency. With writes the curves need only contention
+($\sigma\approx0.038$ at 30 and 50\% writes); more writes lower $\lambda$, not $\sigma$. The leader's CPU per operation,
+measured along the curve (38--40\,$\mu$s), matches the demand the fit implies (37\,$\mu$s): the leader's two vCPUs are
+the contended resource.
 
-\emph{Limitations.} One zone, shared hosts and 2-vCPU servers; two disk types that a prior \texttt{fio} test would have
-shown to be alike; one USL curve, with probes at one point of another configuration; the leader's share of sessions not
-recorded; no creates, watches or multi-operations. Next: curves at 0\% and 50\% writes, probed along the way.
+\emph{Limitations.} One zone, shared 2-vCPU hosts; two disk types that turned out alike; a client near its limit for
+reads only; no creates, watches or multi-operations. Next: a larger leader and \texttt{leaderServes=no}.
 
 \begin{thebibliography}{10}
 
@@ -597,6 +603,17 @@ Fig.~\ref{fig:pipeline} predicts for a client attached to a follower.
   \end{tabular}
 \end{table}
 
+\section{Probes at 80 clients: forceSync and log disk}
+\label{app:probes}
+
+\begin{table}[h]
+  \centering
+  \caption{Probe runs at 80 clients and 50\% writes: throughput, ZooKeeper's counters and the leader's CPU per thread.}
+  \label{tab:ebpfzk}
+  \scriptsize
+  \input{ebpf_summary_combined.tex}
+\end{table}
+
 \section{Response time model}
 \label{app:latency}
 
@@ -610,6 +627,15 @@ Fig.~\ref{fig:pipeline} predicts for a client attached to a follower.
 
 \section{Per-stage times at every load level}
 \label{app:stages}
+
+\begin{table}[h]
+  \centering
+  \caption{Leader per-stage times (ms, mean of the replicates) and requests per \texttt{fsync}; the write latency is pooled
+    over all servers. 1\,ms timer resolution.}
+  \label{tab:stages}
+  \scriptsize
+  \input{stage_breakdown.tex}
+\end{table}
 
 \begin{figure}[h]
   \centering

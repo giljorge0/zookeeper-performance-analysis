@@ -1,0 +1,1 @@
+config=yes:ssd force_sync=yes log_disk=ssd ensemble=3 clients=64 write_ratio=0.3 leader=10.132.0.12 probe_s=45 duration=25 warmup=3

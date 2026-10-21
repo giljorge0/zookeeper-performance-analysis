@@ -1,0 +1,10 @@
+\begin{tabular}{@{}lrrrrrr@{}}
+\toprule
+Configuration & ops/s & no probes & overhead (\%) & req./fsync & ZK fsync (ms) & to quorum ACK (ms) \\
+\midrule
+fsync on, pd-ssd & 1840 & 1726 & -6.6 & 1.0 & 0.06 & 0.77 \\
+fsync on, pd-ssd & 18958 & 19746 & 4.0 & 4.8 & 0.27 & 1.40 \\
+fsync on, pd-ssd & 37239 & 35836 & -3.9 & 13.1 & 0.70 & 2.26 \\
+fsync on, pd-ssd & 44450 & 42842 & -3.8 & 18.5 & 0.76 & 2.95 \\
+\bottomrule
+\end{tabular}

@@ -1,0 +1,162 @@
+{
+  "fsync_yes_ssd": {
+    "config": {
+      "config": "yes:ssd",
+      "force_sync": "yes",
+      "log_disk": "ssd",
+      "ensemble": "3",
+      "clients": "64",
+      "write_ratio": "0.3",
+      "leader": "10.132.0.12",
+      "probe_s": "45",
+      "duration": "25",
+      "warmup": "3"
+    },
+    "fsync_calls": 23716,
+    "fsync_mean_us": 1015.4394501602294,
+    "fsync_p50_us": 2048,
+    "fsync_p99_us": 2048,
+    "fsync_max_us": 16338,
+    "fsync_buckets": [
+      [
+        256,
+        512,
+        6754
+      ],
+      [
+        512,
+        1024,
+        994
+      ],
+      [
+        1024,
+        2048,
+        15821
+      ],
+      [
+        2048,
+        4096,
+        70
+      ],
+      [
+        4096,
+        8192,
+        66
+      ],
+      [
+        8192,
+        16384,
+        11
+      ]
+    ],
+    "bio_buckets": [
+      [
+        8,
+        16,
+        1
+      ],
+      [
+        16,
+        32,
+        4352
+      ],
+      [
+        32,
+        64,
+        2959
+      ],
+      [
+        64,
+        128,
+        162
+      ],
+      [
+        128,
+        256,
+        1056
+      ],
+      [
+        256,
+        512,
+        54269
+      ],
+      [
+        512,
+        1024,
+        729
+      ],
+      [
+        1024,
+        2048,
+        52
+      ],
+      [
+        2048,
+        4096,
+        40
+      ],
+      [
+        4096,
+        8192,
+        69
+      ]
+    ],
+    "bio_scope": "log disk (sdc)",
+    "bio_ios": 63689,
+    "bio_p50_us": 512,
+    "bio_p99_us": 1024,
+    "runq_events": 2881383,
+    "runq_p50_us": 15,
+    "runq_p99_us": 511,
+    "tcp_retransmits": 0,
+    "tcp_resets_sent": 2,
+    "probe_seconds": 44,
+    "cpu_window_s": 30.0,
+    "jvm_cores": 1.5050505050505052,
+    "stage_cores": {
+      "replication to followers": 0.5218855218855218,
+      "client connections (I/O)": 0.36094276094276095,
+      "PrepRequestProcessor (zxid)": 0.22626262626262628,
+      "CommitProcessor": 0.15151515151515152,
+      "SyncRequestProcessor (log, fsync)": 0.1037037037037037,
+      "commit workers (apply, reply)": 0.08047138047138047,
+      "request throttler": 0.03973063973063973,
+      "JIT compiler": 0.017508417508417508,
+      "garbage collection": 0.0016835016835016836,
+      "other": 0.00101010101010101,
+      "quorum peer main loop": 0.0003367003367003367
+    },
+    "thread_cores": {
+      "LearnerHandler-": 0.2723905723905724,
+      "Sender-/10.132.": 0.2494949494949495,
+      "ProcessThread(s": 0.22626262626262628,
+      "NIOWorkerThread": 0.1872053872053872,
+      "NIOServerCxnFac": 0.17373737373737375,
+      "CommitProcessor": 0.15151515151515152,
+      "SyncThread:3": 0.1037037037037037,
+      "CommitProcWorkT": 0.08047138047138047,
+      "RequestThrottle": 0.03973063973063973,
+      "C2 CompilerThre": 0.01616161616161616,
+      "C1 CompilerThre": 0.0013468013468013469,
+      "GC Thread#1": 0.00101010101010101
+    },
+    "throughput": 37238.84,
+    "throughput_noprobe": 35835.619999999995,
+    "noprobe_runs": [
+      34094.72,
+      37576.52
+    ],
+    "probe_overhead_pct": -3.9157129135759305,
+    "write_p50_ms": 3.789,
+    "errors": 0.0,
+    "zk": {
+      "sync_processor_batch_size": 13.104377530364372,
+      "fsynctime": 0.7020998482037443,
+      "sync_processor_queue_and_flush_time_ms": 2.057989064496301,
+      "quorum_ack_latency": 2.257524997505881,
+      "prep_processor_queue_time_ms": 0.41038023679417124,
+      "updatelatency": 3.4447383749931615,
+      "leader": "10.132.0.12"
+    }
+  }
+}

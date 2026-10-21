@@ -1,0 +1,15 @@
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+Leader, mean per run & $N=1$ & $N=16$ & $N=64$ & $N=160$ \\
+\midrule
+prep queue (zxid) (ms) & 0.01 & 0.08 & 0.57 & 1.98 \\
+sync queue (ms) & 0.03 & 0.51 & 0.72 & 0.86 \\
+sync queue + flush (ms) & 0.56 & 1.26 & 2.10 & 2.40 \\
+fsync (ms) & 0.06 & 0.29 & 0.83 & 0.80 \\
+until quorum ACK (ms) & 0.68 & 1.39 & 2.41 & 3.24 \\
+commit to applied (ms) & 0.02 & 0.09 & 0.32 & 1.84 \\
+server-side write latency (ms) & 0.82 & 1.72 & 3.60 & 6.91 \\
+server-side read latency (leader) (ms) & 0.05 & 0.15 & 0.76 & 4.12 \\
+requests per fsync & 1.0 & 5.2 & 18.5 & 24.1 \\
+\bottomrule
+\end{tabular}

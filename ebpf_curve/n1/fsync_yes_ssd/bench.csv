@@ -1,0 +1,2 @@
+timestamp,run_id,label,ensemble_size,clients,write_ratio,duration_s,pool_size,payload_bytes,total_ops_ok,total_ops_err,throughput_ops_sec,overall_p50_ms,overall_p95_ms,overall_p99_ms,read_count,read_p50_ms,read_p95_ms,read_p99_ms,write_count,write_p50_ms,write_p95_ms,write_p99_ms,error_breakdown
+2026-10-21T18:37:31,e1c35750ef63,,3,1,0.3,25.0,200,128,45998,0,1839.92,0.297,1.186,2.048,32115,0.269,0.374,0.462,13883,1.062,1.899,2.212,{}

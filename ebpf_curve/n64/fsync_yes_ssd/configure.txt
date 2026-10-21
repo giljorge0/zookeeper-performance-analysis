@@ -1,0 +1,4 @@
+    verify 10.132.0.13: forceSync=no in JVM args: 0 (OK), log dir on ssd: OK
+    verify 10.132.0.8: forceSync=no in JVM args: 0 (OK), log dir on ssd: OK
+    verify 10.132.0.12: forceSync=no in JVM args: 0 (OK), log dir on ssd: OK
+HOSTS=10.132.0.13:2181,10.132.0.8:2181,10.132.0.12:2181

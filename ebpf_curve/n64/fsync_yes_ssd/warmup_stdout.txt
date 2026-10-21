@@ -1,0 +1,4 @@
+[setup] creating pool of 200 znodes under /bench/6b4d34a4776a
+[run] launching 64 clients, write_ratio=0.3, warmup=2.0s, duration=10.0s
+[done] throughput=20742.8 ops/s  p50=2.412ms p95=8.319ms p99=13.463ms  errors=0
+[cleanup] deleting znode pool

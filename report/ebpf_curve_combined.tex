@@ -1,0 +1,22 @@
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+clients & $N=1$ & $N=16$ & $N=64$ & $N=160$ \\
+\midrule
+ops/s with probes & 1840 & 18958 & 37239 & 44450 \\
+ops/s without (mean of 2) & 1726 & 19746 & 35836 & 42842 \\
+fsync calls (eBPF) & 15719 & 32824 & 23716 & 20016 \\
+fsync mean, eBPF ($\mu$s) & 551 & 724 & 1015 & 1104 \\
+fsync mean, ZooKeeper (ms) & 0.06 & 0.27 & 0.70 & 0.76 \\
+requests per flush & 1.0 & 4.8 & 13.1 & 18.5 \\
+to quorum ACK (ms) & 0.77 & 1.40 & 2.26 & 2.95 \\
+\midrule
+\multicolumn{5}{@{}l}{\emph{CPU of the leader (cores of 2)}} \\
+replication to followers & 0.07 & 0.42 & 0.52 & 0.58 \\
+client connections (I/O) & 0.18 & 0.29 & 0.36 & 0.43 \\
+request preparation & 0.05 & 0.17 & 0.23 & 0.25 \\
+commit & 0.04 & 0.11 & 0.15 & 0.17 \\
+log sync & 0.05 & 0.11 & 0.10 & 0.11 \\
+commit workers & 0.02 & 0.04 & 0.08 & 0.09 \\
+whole JVM & 0.52 & 1.22 & 1.51 & 1.70 \\
+\bottomrule
+\end{tabular}
